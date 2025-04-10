@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Dataset Recorder Node -->
+  <node name="dataset_recorder" pkg="dataset_recorder" type="dataset_recorder_node.py" output="screen">
+    <!-- Parameters -->
+    <param name="save_dir" value="$(env HOME)/dataset_recordings" />
+    <param name="image_topic" value="/camera/rgb/image_raw" />
+    <param name="pointcloud_topic" value="/camera/depth/points" />
+    <param name="robot_state_topic" value="/robot/state" />
+    <param name="sync_mode" value="false" />
+  </node>
+</launch>

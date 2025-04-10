@@ -1,0 +1,63 @@
+{
+	"name": "dev",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+	"runArgs": [
+		"--cap-add=SYS_PTRACE",
+		"--gpus=all",
+		"--privileged",
+		"--net=host",
+		"--ipc=host",
+		"--pid=host",
+		"--security-opt", "seccomp=unconfined",
+		"-v", "/tmp/.X11-unix:/tmp/.X11-unix",
+		"-v", "/dev:/dev",
+		"-e", "DISPLAY=${localEnv:DISPLAY}"
+	],
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils": {
+			"configureZshAsDefaultShell": true
+		}
+	},
+	"remoteUser": "ubuntu",
+	// need to setup kinect: https://scazlab.github.io/azure_setup_guide.html
+	"initializeCommand": "xhost +",
+	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+	"mounts": [
+		"source=dataset_recorder-bashhistory,target=/commandhistory,type=volume"
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools-extension-pack",
+				"xaver.clang-format",
+				"ms-azuretools.vscode-docker",
+				"ms-python.python",
+				"ms-python.black-formatter",
+				"ms-toolsai.jupyter",
+				"ms-python.vscode-pylance",
+				"ms-iot.vscode-ros"
+			],
+			"settings": {
+				"remote.autoForwardPorts": false,
+				"dev.containers.copyGitConfig": true,
+				"python.defaultInterpreterPath": "/usr/bin/python3",
+				"terminal.integrated.defaultProfile.linux": "zsh",
+				"terminal.integrated.profiles.linux": {
+					"zsh": {
+						"path": "/usr/bin/zsh"
+					}
+				},
+				"[python]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-python.black-formatter"
+				},
+				"python.analysis.extraPaths": [
+					"/opt/ros/noetic/lib/python3/dist-packages"
+				]
+			}
+		}
+	}
+}
