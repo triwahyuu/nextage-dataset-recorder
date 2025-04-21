@@ -25,11 +25,11 @@ echo "export ROSLAUNCH_SSH_UNKNOWN=1" >> ~/.zshrc
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 echo "source /opt/ros/noetic/setup.zsh" >> ~/.zshrc
 
-# source /opt/ros/noetic/setup.bash
-# # rosdep install -r -y --from-paths src --ignore-src
-# catkin clean --yes
-# catkin config -DPYTHON_EXECUTABLE=/usr/bin/python3.8 -DPYTHON_INCLUDE_DIR=/usr/include/python3.8 -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.8.so
-# catkin build
+source /opt/ros/noetic/setup.bash
+# rosdep install -r -y --from-paths src --ignore-src
+catkin clean --yes
+catkin config -DPYTHON_EXECUTABLE=/usr/bin/python3.8 -DPYTHON_INCLUDE_DIR=/usr/include/python3.8 -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.8.so
+catkin build
 # source $WORKSPACE_DIR/devel/setup.bash
 
 echo "DONE!"
