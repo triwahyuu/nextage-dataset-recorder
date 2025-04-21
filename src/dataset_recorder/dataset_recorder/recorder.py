@@ -5,11 +5,14 @@ from pathlib import Path
 
 import rospy
 import message_filters
-import ros_numpy
 
 from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
-from sensor_msgs.msg import PointCloud2, JointState
+from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
+
+from camera import KinectRecorder
+from robot import ArmRecorder
+
 
 class DatasetRecorder:
     def __init__(self):
@@ -23,9 +26,6 @@ class DatasetRecorder:
         self.sync_period = rospy.Duration(1.0 / sync_rate)
         self.queue_size = rospy.get_param("~queue_size", 10)
         self.slop = rospy.get_param("~slop", 0.1)
-
-        # --- Topic Parameters ---
-        self.robot_state_topic_name: str = rospy.get_param("~robot_state_topic", "/joint_states").lstrip('/')
 
         # Initialize variables
         self.is_recording: bool = False
@@ -56,10 +56,16 @@ class DatasetRecorder:
         self.subscribers.append(self.robot_state_sub)
         self.subscriber_info.append({"name": "robot_state", "type": JointState})
 
+        # cameras
+        self.camera = KinectRecorder(self.base_save_dir, "")
+
+        # robot
+        # TODO: FINISH
+        self.robot = ArmRecorder(self.base_save_dir, "left")
+
         # --- Setup Synchronizer ---
-        if not self.subscribers:
-             rospy.logerr("No subscribers configured. Exiting.")
-             return # Or raise an exception
+        self.camera.setup(self.subscribers, self.subscriber_info)
+        self.robot.setup(self.subscribers, self.subscriber_info)
 
         self.ts = message_filters.ApproximateTimeSynchronizer(
             self.subscribers,
@@ -158,7 +164,7 @@ class DatasetRecorder:
             rospy.logerr(f"Failed to save config file: {e}")
 
 
-    def sync_callback(self, *msgs) -> None: # Use *msgs to handle variable inputs
+    def sync_callback(self, *msgs) -> None:
         """Callback for synchronized messages"""
         if not self.is_recording:
             return
@@ -193,9 +199,9 @@ class DatasetRecorder:
             # Save individual files
             try:
                 # Core data
-                frame_manifest["rgb_path"] = self.save_image(received_data["image"], frame_id_str)
-                frame_manifest["pointcloud_path"] = self.save_pointcloud(received_data["pointcloud"], frame_id_str)
-                frame_manifest["jointstate_path"] = self.save_robot_state(received_data["robot_state"], frame_id_str)
+                frame_manifest["rgb_path"] = self.camera.save_image(received_data, frame_id_str)
+                frame_manifest["pointcloud_path"] = self.camera.save_pointcloud(received_data, frame_id_str)
+                frame_manifest["jointstate_path"] = self.robot.save_robot_state(received_data, frame_id_str)
 
                 # Add entry to manifest (remove None values for cleaner output)
                 self.manifest_data.append({k: v for k, v in frame_manifest.items() if v is not None})
@@ -206,73 +212,6 @@ class DatasetRecorder:
 
             except Exception as e:
                 rospy.logerr(f"Error saving data for frame {self.frame_count}: {e}", exc_info=True) # Add traceback
-
-
-    def save_pointcloud(self, msg: PointCloud2, frame_id: str) -> str:
-        """Save pointcloud message to disk as NPY (XYZRGB)"""
-        try:
-            pc_array = ros_numpy.numpify(msg)
-            # Ensure fields exist before accessing
-            if not all(f in pc_array.dtype.names for f in ('x', 'y', 'z', 'rgb')):
-                 rospy.logwarn_throttle(10.0, f"Pointcloud frame {frame_id} missing expected fields (x,y,z,rgb). Saving raw structure.")
-                 points = pc_array # Save the structured array directly
-            else:
-                points = np.zeros((pc_array.shape[0], 6), dtype=np.float32) # Use float32
-                points[:, 0] = pc_array['x']
-                points[:, 1] = pc_array['y']
-                points[:, 2] = pc_array['z']
-                # Handle RGB conversion carefully
-                if pc_array['rgb'].dtype == np.float32: 
-                     rgb_int = pc_array['rgb'].copy().view(np.uint32)
-                     r = (rgb_int >> 16) & 0xFF
-                     g = (rgb_int >> 8) & 0xFF
-                     b = rgb_int & 0xFF
-                     points[:, 3] = r
-                     points[:, 4] = g
-                     points[:, 5] = b
-                elif pc_array['rgb'].dtype == np.uint32:
-                     r = (pc_array['rgb'] >> 16) & 0xFF
-                     g = (pc_array['rgb'] >> 8) & 0xFF
-                     b = pc_array['rgb'] & 0xFF
-                     points[:, 3] = r
-                     points[:, 4] = g
-                     points[:, 5] = b
-                else: # Assume direct RGB fields if not packed float
-                    # Check if 'r', 'g', 'b' fields exist instead of 'rgb'
-                    if all(f in pc_array.dtype.names for f in ('r', 'g', 'b')):
-                         points[:, 3] = pc_array['r']
-                         points[:, 4] = pc_array['g']
-                         points[:, 5] = pc_array['b']
-                    else:
-                        rospy.logwarn_throttle(10.0, f"Unrecognized RGB format in pointcloud frame {frame_id}. Saving Zeros for RGB.")
-                        # Keep RGB as zeros
-
-            filename = f"{frame_id}.npy"
-            filepath = self.pointcloud_dir / filename
-            np.save(str(filepath), points)
-            return f"{self.pointcloud_dir.name}/{filename}" # Relative path
-        except Exception as e:
-            rospy.logerr(f"Failed to save pointcloud frame {frame_id}: {e}")
-            raise
-
-    def save_robot_state(self, msg: JointState, frame_id: str) -> str:
-        """Save robot state message to disk as JSON"""
-        try:
-            state_dict = {
-                "header_stamp_sec": msg.header.stamp.to_sec(),
-                "name": list(msg.name),
-                "position": list(msg.position) if msg.position is not None else [],
-                "velocity": list(msg.velocity) if msg.velocity is not None else [],
-                "effort": list(msg.effort) if msg.effort is not None else [],
-            }
-            filename = f"{frame_id}.json"
-            filepath = self.robot_state_dir / filename
-            with open(filepath, 'w') as f:
-                json.dump(state_dict, f, indent=4)
-            return f"{self.robot_state_dir.name}/{filename}" # Relative path
-        except Exception as e:
-            rospy.logerr(f"Failed to save robot state frame {frame_id}: {e}")
-            raise
 
     def convert_ee_pose(self, msg: PoseStamped):
         pose_dict = {
