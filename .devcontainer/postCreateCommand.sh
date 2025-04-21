@@ -24,6 +24,14 @@ echo "export ROSLAUNCH_SSH_UNKNOWN=1" >> ~/.zshrc
 
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 echo "source /opt/ros/noetic/setup.zsh" >> ~/.zshrc
+echo "source /workspaces/dataset_recorder/devel/setup.bash" >> ~/.bashrc
+echo "source /workspaces/dataset_recorder/devel/setup.zsh" >> ~/.zshrc
+
+git submodule update --init --recursive
+sudo usermod -a -G plugdev $USER
+sudo mkdir -p /etc/udev/rules.d
+sudo cp src/Azure_Kinect_ROS_Driver/scripts/99-k4a.rules /etc/udev/rules.d/
+sudo chmod a+rw /dev/bus/usb/*/*
 
 source /opt/ros/noetic/setup.bash
 # rosdep install -r -y --from-paths src --ignore-src

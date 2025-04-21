@@ -72,7 +72,7 @@ RUN python3 -m pip install pip --upgrade && \
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libpcl-dev libusb-1.0-0-dev libfmt-dev clang-format-12 ros-noetic-pcl-conversions && \
+        libpcl-dev libusb-1.0-0-dev libfmt-dev udev clang-format-12 ros-noetic-pcl-conversions && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
