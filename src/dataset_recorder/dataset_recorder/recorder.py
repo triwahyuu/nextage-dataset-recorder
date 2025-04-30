@@ -1,6 +1,5 @@
 import time
 import json
-import numpy as np
 from pathlib import Path
 
 import rospy
@@ -10,8 +9,9 @@ from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 
-from camera import KinectRecorder
+from camera import DualKinectRecorder
 from robot import ArmRecorder
+from utils import map_subinfo_to_idx
 
 
 class DatasetRecorder:
@@ -57,15 +57,19 @@ class DatasetRecorder:
         self.subscriber_info.append({"name": "robot_state", "type": JointState})
 
         # cameras
-        self.camera = KinectRecorder(self.base_save_dir, "")
+        self.camera = DualKinectRecorder(self.base_save_dir)
 
         # robot
         # TODO: FINISH
-        self.robot = ArmRecorder(self.base_save_dir, "left")
+        # self.robot = ArmRecorder(self.base_save_dir, "left")
 
         # --- Setup Synchronizer ---
         self.camera.setup(self.subscribers, self.subscriber_info)
-        self.robot.setup(self.subscribers, self.subscriber_info)
+        # self.robot.setup(self.subscribers, self.subscriber_info)
+
+        self.msg_idx_map = map_subinfo_to_idx(self.subscriber_info)
+        self.camera.set_msg_idx_map(self.msg_idx_map)
+        # self.robot.set_msg_idx_map(self.msg_idx_map)
 
         self.ts = message_filters.ApproximateTimeSynchronizer(
             self.subscribers,
@@ -173,45 +177,33 @@ class DatasetRecorder:
         if current_time - self.last_sync_time >= self.sync_period:
             self.last_sync_time = current_time # Use the time we checked
 
-            # Map received messages based on the order in self.subscriber_info
-            received_data = {}
-            if len(msgs) != len(self.subscriber_info):
-                rospy.logwarn_throttle(5.0, f"Mismatch between received messages ({len(msgs)}) and expected subscribers ({len(self.subscriber_info)}). Skipping frame.")
-                return
-            for i, msg in enumerate(msgs):
-                info = self.subscriber_info[i]
-                received_data[info["name"]] = msg
-
             # Use frame count for consistent naming across modalities
             frame_id_str = f"{self.frame_count:06d}" # e.g., 000000, 000001
+
             # Use a consistent timestamp (e.g., from image or robot state header)
             # Using robot_state as it often reflects the control loop time better
-            timestamp_sec = received_data["robot_state"].header.stamp.to_sec()
-            timestamp_ros = received_data["robot_state"].header.stamp
+            # timestamp_sec = received_data["robot_state"].header.stamp.to_sec()
 
-            frame_manifest = {
+            frame_info = {
                 "frame_id": self.frame_count,
-                "timestamp": timestamp_sec,
-                "rgb_path": None,
-                "pointcloud_path": None,
-                "data_path": None
+                "timestamp": rospy.Time.now().to_sec(),
             }
             # Save individual files
             try:
                 # Core data
-                frame_manifest["rgb_path"] = self.camera.save_image(received_data, frame_id_str)
-                frame_manifest["pointcloud_path"] = self.camera.save_pointcloud(received_data, frame_id_str)
-                frame_manifest["jointstate_path"] = self.robot.save_robot_state(received_data, frame_id_str)
+                frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
+                frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
+                frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
+                # frame_info["jointstate_path"] = self.robot.save_robot_state(msgs, frame_id_str)
 
-                # Add entry to manifest (remove None values for cleaner output)
-                self.manifest_data.append({k: v for k, v in frame_manifest.items() if v is not None})
+                self.manifest_data.append(frame_info)
 
                 self.frame_count += 1
-                if self.frame_count % 20 == 0: # Log progress occasionally
-                     rospy.loginfo(f"Recorded frame {self.frame_count}")
+                if self.frame_count % 20 == 0:
+                    rospy.loginfo(f"Recorded frame {self.frame_count}")
 
             except Exception as e:
-                rospy.logerr(f"Error saving data for frame {self.frame_count}: {e}", exc_info=True) # Add traceback
+                rospy.logerr(f"Error saving data for frame {self.frame_count}: {e}", exc_info=True)
 
     def convert_ee_pose(self, msg: PoseStamped):
         pose_dict = {
@@ -237,7 +229,7 @@ class DatasetRecorder:
             filepath = self.data_dir / filename
             with open(filepath, 'w') as f:
                 json.dump(data_dict, f, indent=4)
-            return f"{self.data_dir.name}/{filename}"  # Relative path
+            return f"{self.data_dir.name}/{filename}"
         except Exception as e:
             rospy.logerr(f"Failed to save data frame {frame_id}: {e}")
             raise
