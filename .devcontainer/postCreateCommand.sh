@@ -24,11 +24,12 @@ echo "export ROSLAUNCH_SSH_UNKNOWN=1" >> ~/.zshrc
 
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 echo "source /opt/ros/noetic/setup.zsh" >> ~/.zshrc
-echo "source /workspaces/dataset_recorder/devel/setup.bash" >> ~/.bashrc
-echo "source /workspaces/dataset_recorder/devel/setup.zsh" >> ~/.zshrc
+echo "source $(pwd)/devel/setup.bash" >> ~/.bashrc
+echo "source $(pwd)/devel/setup.zsh" >> ~/.zshrc
 
 git submodule update --init --recursive
 sudo usermod -a -G plugdev $USER
+sudo usermod -aG dialout $USER
 sudo mkdir -p /etc/udev/rules.d
 sudo cp src/Azure_Kinect_ROS_Driver/scripts/99-k4a.rules /etc/udev/rules.d/
 sudo chmod a+rw /dev/bus/usb/*/*
@@ -38,6 +39,5 @@ source /opt/ros/noetic/setup.bash
 catkin clean --yes
 catkin config -DPYTHON_EXECUTABLE=/usr/bin/python3.8 -DPYTHON_INCLUDE_DIR=/usr/include/python3.8 -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.8.so
 catkin build
-# source $WORKSPACE_DIR/devel/setup.bash
 
 echo "DONE!"
