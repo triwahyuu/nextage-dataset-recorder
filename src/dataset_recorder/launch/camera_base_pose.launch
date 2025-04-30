@@ -2,8 +2,8 @@
   <!-- The rpy in the comment uses the extrinsic XYZ convention, which is the same as is used in a URDF. See
        http://wiki.ros.org/geometry2/RotationMethods and https://en.wikipedia.org/wiki/Euler_angles for more info. -->
   <!-- xyz="0.581063 -0.0190241 0.663927" rpy="2.65036 -1.65389 -0.479746" -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_broadcaster"
+  <node pkg="tf2_ros" type="static_transform_publisher" name="kinect_left_link_broadcaster"
       args="0.665887 0.191912 0.685117   -0.586331 0.00929284 0.799251 -0.131633 WAIST kinect_left_camera_base" />
-  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_link_broadcaster"
+  <node pkg="tf2_ros" type="static_transform_publisher" name="kinect_right_link_broadcaster"
       args="0.678348 -0.197239 0.680007   -0.595391 0.0116537 0.802121 0.0444444 WAIST kinect_right_camera_base" />
 </launch>
