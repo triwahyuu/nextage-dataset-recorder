@@ -7,7 +7,8 @@ from pathlib import Path
 import rospy
 import message_filters
 import sensor_msgs.point_cloud2 as pc2
-from sensor_msgs.msg import Image, PointCloud2
+import tf2_ros
+from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 from cv_bridge import CvBridge
 
 from utils import map_subinfo_to_idx
@@ -48,6 +49,10 @@ class KinectRecorder:
         self.pc_info_name = f"{self.node_ns}/pointcloud"
 
         self.tf_name = f"{node_ns}_camera_base"
+        self.base_frame = "WAIST"
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.camera_pose_tf = None
 
         self.image_dir = self.output_dir / "rgb"
         self.depth_dir = self.output_dir / "depth"
@@ -63,6 +68,14 @@ class KinectRecorder:
 
         self.rgb_count = 0
         self.pc_count = 0
+
+        rgb_caminfo_topic = rospy.get_param("~rgb_caminfo_topic", "/rgb/camera_info").lstrip('/')
+        self.rgb_caminfo_topic = f"/{self.node_ns}/{rgb_caminfo_topic}"
+        self.rgb_caminfo = None
+
+        depth_caminfo_topic = rospy.get_param("~depth_caminfo_topic", "/depth/camera_info").lstrip('/')
+        self.depth_caminfo_topic = f"/{self.node_ns}/{depth_caminfo_topic}"
+        self.depth_caminfo = None
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
@@ -82,8 +95,75 @@ class KinectRecorder:
         subscribers.append(self.pc_sub)
         subscriber_info.append({"name": self.pc_info_name, "type": PointCloud2})
 
+        rgb_caminfo = rospy.wait_for_message(self.rgb_caminfo_topic, CameraInfo, timeout=1)
+        self.rgb_caminfo = self.caminfo_to_dict(rgb_caminfo)
+
+        depth_caminfo = rospy.wait_for_message(self.depth_caminfo_topic, CameraInfo, timeout=1)
+        self.depth_caminfo = self.caminfo_to_dict(depth_caminfo)
+
+        self.camera_pose_tf = self.get_camera_pose()
+
     def set_msg_idx_map(self, idx_map: dict):
         self.msg_idx_map = idx_map
+
+    def get_attributes(self):
+        if self.rgb_caminfo is None or self.depth_caminfo is None:
+            raise RuntimeError("Camera info not available yet. Call setup() first.")
+
+        return {
+            "cam_pose": self.camera_pose_tf,
+            "cam_info": {
+                "rgb": self.rgb_caminfo,
+                "depth": self.depth_caminfo,
+            },
+            "pcd_frame": f"{self.node_ns}_depth_camera_link"
+        }
+
+    def get_pose_tf(self, tf_name: str, base_frame: str):
+        try:
+            # Get the latest transform from base_frame to the camera's frame
+            transform_stamped: tf2_ros.TransformStamped = self.tf_buffer.lookup_transform(
+                base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1) # Short timeout
+            )
+            # Convert to a dictionary format
+            pose_tf = {
+                "base_frame_id": transform_stamped.header.frame_id,
+                "frame_id": transform_stamped.child_frame_id,
+                "translation": {"x": transform_stamped.transform.translation.x, "y": transform_stamped.transform.translation.y, "z": transform_stamped.transform.translation.z},
+                "rotation": {"x": transform_stamped.transform.rotation.x, "y": transform_stamped.transform.rotation.y, "z": transform_stamped.transform.rotation.z, "w": transform_stamped.transform.rotation.w}
+            }
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            rospy.logwarn(f"[{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+            return None
+        return pose_tf
+
+    def get_camera_pose(self):
+        return {
+            "camera2world": self.get_pose_tf(self.tf_name, self.base_frame),
+            "depth2camera": self.get_pose_tf(f"{self.node_ns}_depth_camera_link", self.tf_name),
+            "rgb2camera": self.get_pose_tf(f"{self.node_ns}_rgb_camera_link", self.tf_name),
+        }
+
+    @staticmethod
+    def caminfo_to_dict(msg: CameraInfo):
+        return {
+            "height": msg.height,
+            "width": msg.width,
+            "distortion_model": msg.distortion_model,
+            "D": list(msg.D),  # Distortion coefficients
+            "K": list(msg.K),  # Intrinsic camera matrix
+            "R": list(msg.R),  # Rectification matrix
+            "P": list(msg.P),  # Projection/camera matrix
+            "binning_x": msg.binning_x,
+            "binning_y": msg.binning_y,
+            "roi": {
+                "x_offset": msg.roi.x_offset,
+                "y_offset": msg.roi.y_offset,
+                "height": msg.roi.height,
+                "width": msg.roi.width,
+                "do_rectify": msg.roi.do_rectify,
+            },
+        }
 
     def save_image(self, msgs: list, frame_id: str) -> str:
         """Save image message to disk as PNG"""
