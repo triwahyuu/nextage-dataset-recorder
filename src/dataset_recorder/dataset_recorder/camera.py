@@ -8,6 +8,7 @@ import rospy
 import message_filters
 import sensor_msgs.point_cloud2 as pc2
 import tf2_ros
+import tf2_sensor_msgs
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 from cv_bridge import CvBridge
 
@@ -94,6 +95,8 @@ class KinectRecorder:
         self.pc_sub = message_filters.Subscriber(self.pc_topic_name, PointCloud2)
         subscribers.append(self.pc_sub)
         subscriber_info.append({"name": self.pc_info_name, "type": PointCloud2})
+        self.pcd_frameid = f"{self.node_ns}_rgb_camera_link"
+        self.pcd2base = None
 
         rgb_caminfo = rospy.wait_for_message(self.rgb_caminfo_topic, CameraInfo, timeout=1)
         self.rgb_caminfo = self.caminfo_to_dict(rgb_caminfo)
@@ -102,6 +105,7 @@ class KinectRecorder:
         self.depth_caminfo = self.caminfo_to_dict(depth_caminfo)
 
         self.camera_pose_tf = self.get_camera_pose()
+        self.pcd2base = self.get_pose_tf(self.pcd_frameid, self.base_frame)
 
     def set_msg_idx_map(self, idx_map: dict):
         self.msg_idx_map = idx_map
@@ -116,32 +120,37 @@ class KinectRecorder:
                 "rgb": self.rgb_caminfo,
                 "depth": self.depth_caminfo,
             },
-            "pcd_frame": f"{self.node_ns}_depth_camera_link"
+            "pcd_frame": self.base_frame
         }
 
-    def get_pose_tf(self, tf_name: str, base_frame: str):
+    def get_pose_tf(self, tf_name: str, base_frame: str) -> tf2_ros.TransformStamped:
         try:
             # Get the latest transform from base_frame to the camera's frame
             transform_stamped: tf2_ros.TransformStamped = self.tf_buffer.lookup_transform(
                 base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1) # Short timeout
             )
-            # Convert to a dictionary format
-            pose_tf = {
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            rospy.logwarn(f"[{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+            return None
+        return transform_stamped
+
+    def get_pose_tf_dict(self, tf_name: str, base_frame: str):
+        transform_stamped = self.get_pose_tf(tf_name, base_frame)
+        if transform_stamped is None:
+            return None
+
+        return {
                 "base_frame_id": transform_stamped.header.frame_id,
                 "frame_id": transform_stamped.child_frame_id,
                 "translation": {"x": transform_stamped.transform.translation.x, "y": transform_stamped.transform.translation.y, "z": transform_stamped.transform.translation.z},
                 "rotation": {"x": transform_stamped.transform.rotation.x, "y": transform_stamped.transform.rotation.y, "z": transform_stamped.transform.rotation.z, "w": transform_stamped.transform.rotation.w}
             }
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"[{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
-            return None
-        return pose_tf
 
     def get_camera_pose(self):
         return {
-            "camera2world": self.get_pose_tf(self.tf_name, self.base_frame),
-            "depth2camera": self.get_pose_tf(f"{self.node_ns}_depth_camera_link", self.tf_name),
-            "rgb2camera": self.get_pose_tf(f"{self.node_ns}_rgb_camera_link", self.tf_name),
+            "camera2world": self.get_pose_tf_dict(self.tf_name, self.base_frame),
+            "depth2camera": self.get_pose_tf_dict(f"{self.node_ns}_depth_camera_link", self.tf_name),
+            "rgb2camera": self.get_pose_tf_dict(f"{self.node_ns}_rgb_camera_link", self.tf_name),
         }
 
     @staticmethod
@@ -207,7 +216,11 @@ class KinectRecorder:
         try:
             # Convert PointCloud2 to numpy array
             msg: PointCloud2 = msgs[self.msg_idx_map[self.pc_info_name]]
-            pc_data = pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
+            if self.pcd_frameid != msg.header.frame_id:
+                self.pcd_frameid = msg.header.frame_id
+                self.pcd2base = self.get_pose_tf(self.pcd_frameid, self.base_frame)
+            transformed_msg = tf2_sensor_msgs.do_transform_cloud(msg, self.pcd2base)
+            pc_data = pc2.read_points(transformed_msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
             pc_array = np.array(list(pc_data))
             np.save(filepath, pc_array)
             return filepath
