@@ -130,7 +130,7 @@ class KinectRecorder:
                 base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1) # Short timeout
             )
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"[{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+            rospy.logwarn(f"[KinectRecorder.{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
             return None
         return transform_stamped
 
@@ -258,6 +258,12 @@ class DualKinectRecorder:
         left_path = self.left_recorder.save_pointcloud(msgs, frame_id)
         right_path = self.right_recorder.save_pointcloud(msgs, frame_id)
         return {"l": left_path, "r": right_path}
+
+    def get_attributes(self):
+        return {
+            "left": self.left_recorder.get_attributes(),
+            "right": self.right_recorder.get_attributes()
+        }
 
 
 if __name__ == "__main__":
