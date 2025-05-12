@@ -103,3 +103,4 @@ install/
 devel_collisions.txt
 .catkin_tools/profiles/default/packages
 .catkin_tools/cache
+recordings/
