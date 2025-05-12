@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="kinect_left_sn" default="000153513712"/>
+  <arg name="kinect_right_sn" default="000231113712"/>
+  <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
+  <arg name="color_resolution" default="1080P"/>        <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
+
+  <group ns="kinect_left">
+    <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch">
+      <arg name="tf_prefix" value="kinect_left_"/>
+      <arg name="sensor_sn" value="$(arg kinect_left_sn)"/>
+      <arg name="overwrite_robot_description" value="false"/>
+      <arg name="point_cloud" value="true"/>
+      <arg name="rgb_point_cloud" value="true"/>
+      <arg name="fps" value="$(arg fps)"/>
+      <arg name="color_resolution" value="$(arg color_resolution)"/>
+    </include>
+  </group>
+
+  <group ns="kinect_right">
+    <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch">
+      <arg name="tf_prefix" value="kinect_right_"/>
+      <arg name="sensor_sn" value="$(arg kinect_right_sn)"/>
+      <arg name="overwrite_robot_description" value="false"/>
+      <arg name="point_cloud" value="true"/>
+      <arg name="rgb_point_cloud" value="true"/>
+      <arg name="fps" value="$(arg fps)"/>
+      <arg name="color_resolution" value="$(arg color_resolution)"/>
+    </include>
+  </group>
+
+</launch>

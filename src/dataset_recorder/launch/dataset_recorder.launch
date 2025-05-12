@@ -6,39 +6,21 @@
   <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
   <arg name="color_resolution" default="1080P"/>        <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
 
-  <group ns="kinect_left">
-    <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch">
-      <arg name="tf_prefix" value="kinect_left_"/>
-      <arg name="sensor_sn" value="$(arg kinect_left_sn)"/>
-      <arg name="overwrite_robot_description" value="false"/>
-      <arg name="point_cloud" value="true"/>
-      <arg name="rgb_point_cloud" value="true"/>
-      <arg name="fps" value="$(arg fps)"/>
-      <arg name="color_resolution" value="$(arg color_resolution)"/>
-    </include>
-  </group>
-
-  <group ns="kinect_right">
-    <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch">
-      <arg name="tf_prefix" value="kinect_right_"/>
-      <arg name="sensor_sn" value="$(arg kinect_right_sn)"/>
-      <arg name="overwrite_robot_description" value="false"/>
-      <arg name="point_cloud" value="true"/>
-      <arg name="rgb_point_cloud" value="true"/>
-      <arg name="fps" value="$(arg fps)"/>
-      <arg name="color_resolution" value="$(arg color_resolution)"/>
-    </include>
-  </group>
+  <include file="$(find dataset_recorder)/launch/dual_kinect_camera.launch">
+    <arg name="kinect_left_sn" value="$(arg kinect_left_sn)"/>
+    <arg name="kinect_right_sn" value="$(arg kinect_right_sn)"/>
+    <arg name="fps" value="$(arg fps)"/>
+    <arg name="color_resolution" value="$(arg color_resolution)"/>
+  </include>
 
   <!-- camera pose tf -->
   <include file="$(find dataset_recorder)/launch/camera_base_pose.launch"/>
 
   <!-- Dataset Recorder Node -->
-  <!-- <node name="dataset_recorder" pkg="dataset_recorder" type="dataset_recorder_node.py" output="screen">
-    <param name="save_dir" value="$(env HOME)/dataset_recordings" />
-    <param name="image_topic" value="/camera/rgb/image_raw" />
-    <param name="pointcloud_topic" value="/camera/depth/points" />
-    <param name="robot_state_topic" value="/robot/state" />
-    <param name="sync_mode" value="false" />
-  </node> -->
+  <node name="dataset_recorder" pkg="dataset_recorder" type="dataset_recorder_node.py" output="screen">
+    <param name="save_dir" value="/workspaces/dataset-recorder/recordings" />
+    <param name="image_topic" value="/rgb/image_raw" />
+    <param name="pointcloud_topic" value="/points2" />
+    <param name="robot_state_topic" value="/joint_states" />
+  </node>
 </launch>
