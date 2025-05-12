@@ -39,9 +39,7 @@ class DatasetRecorder:
         self.current_session_dir: Path = self.base_save_dir / f"{timestamp}"
 
         # Setup service
-        self.record_service = rospy.Service(
-            "~record", Trigger, self.handle_start_recording
-        )
+        self.record_service = rospy.Service("~start", Trigger, self.handle_start_recording)
         self.stop_service = rospy.Service("~stop", Trigger, self.handle_stop_recording)
 
         # --- Setup Subscribers ---
