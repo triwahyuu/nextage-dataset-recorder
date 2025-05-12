@@ -12,8 +12,6 @@ import tf2_sensor_msgs
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 from cv_bridge import CvBridge
 
-from utils import map_subinfo_to_idx
-
 
 class KinectRecorder:
     """
@@ -28,7 +26,7 @@ class KinectRecorder:
             output_dir (str): The base directory where data will be saved.
             node_ns (str): The ROS topic namespace for the node.
         """
-        rospy.loginfo(f"Initializing Kinect Recorder...")
+        rospy.loginfo(f"Initializing Kinect Recorder '{node_ns}'...")
 
         self.node_ns = f"{node_ns}"
         self.output_dir = Path(output_dir).joinpath(node_ns).resolve()
@@ -267,6 +265,8 @@ class DualKinectRecorder:
 
 
 if __name__ == "__main__":
+    from dataset_recorder.utils import map_subinfo_to_idx
+
     rospy.init_node("kinect_recorder", anonymous=True)
     output_dir = rospy.get_param("~output_dir", "/workspaces/dataset_recorder/playground/kinect_recordings")
     recorder = KinectRecorder(output_dir, "kinect_left")

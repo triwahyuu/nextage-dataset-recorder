@@ -8,9 +8,9 @@ import message_filters
 
 from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
 
-from camera import DualKinectRecorder
-from robot import RobotStateRecorder
-from utils import map_subinfo_to_idx
+from dataset_recorder.camera import DualKinectRecorder
+from dataset_recorder.robot import RobotStateRecorder
+from dataset_recorder.utils import map_subinfo_to_idx
 
 
 class DatasetRecorder:
@@ -24,7 +24,7 @@ class DatasetRecorder:
         sync_rate: float = rospy.get_param("~sync_rate", 10.0)
         self.sync_period = rospy.Duration(1.0 / sync_rate)
         self.queue_size = rospy.get_param("~queue_size", 10)
-        self.slop = rospy.get_param("~slop", 0.1)
+        self.slop = rospy.get_param("~slop", 1)
 
         # Initialize variables
         self.is_recording: bool = False
@@ -58,16 +58,14 @@ class DatasetRecorder:
         self.robot.set_msg_idx_map(self.msg_idx_map)
 
         self.ts = message_filters.ApproximateTimeSynchronizer(
-            self.subscribers,
-            queue_size=self.queue_size,
-            slop=self.slop,
+            self.subscribers, queue_size=self.queue_size, slop=self.slop,
         )
         self.ts.registerCallback(self.sync_callback)
         # ---
 
-        rospy.loginfo(
-            f"Dataset recorder initialized. Saving to '{self.current_session_dir}'. Waiting for trigger to start recording."
-        )
+        rospy.loginfo(f"Dataset recorder initialized. Saving to '{self.current_session_dir}'")
+        rospy.loginfo("Waiting for trigger to start recording.")
+
 
     def handle_start_recording(self, req: TriggerRequest) -> TriggerResponse:
         """Service handler to start recording data"""
@@ -102,14 +100,15 @@ class DatasetRecorder:
 
         # --- Save the manifest file ---
         manifest_path = self.current_session_dir / "attributes.json"
+
+        time_now = rospy.Time.now()
+        start_time_str = datetime.fromtimestamp(self.recording_start_time.to_sec()).strftime("%Y%m%d_%H%M%S")
+        end_time_str = datetime.fromtimestamp(time_now.to_sec()).strftime("%Y%m%d_%H%M%S")
+        duration_sec = (time_now - self.recording_start_time).to_sec() if self.recording_start_time else 0
         try:
-            # Add final metadata to manifest
-            time_now = rospy.Time.now()
-            start_time_str = datetime.fromtimestamp(self.recording_start_time.to_sec()).strftime("%Y%m%d_%H%M%S")
-            end_time_str = datetime.fromtimestamp(time_now.to_sec()).strftime("%Y%m%d_%H%M%S")
             final_metadata = {
                 "total_frames": self.frame_count,
-                "recording_duration_sec": (time_now.to_sec() - self.recording_start_time).to_sec() if self.recording_start_time else 0,
+                "duration_sec": duration_sec,
                 "start_time": start_time_str,
                 "end_time": end_time_str
             }
@@ -120,16 +119,14 @@ class DatasetRecorder:
                 "frames": self.manifest_data
             }
             with open(manifest_path, 'w') as f:
-                json.dump(manifest_content, f, indent=4)
+                json.dump(manifest_content, f)
             rospy.loginfo(f"Manifest saved to {manifest_path}")
         except Exception as e:
             rospy.logerr(f"Failed to save manifest file: {e}")
         # ---
 
-        duration = (rospy.Time.now() - self.recording_start_time).to_sec() if self.recording_start_time else 0
-
         rospy.loginfo(
-            f"Stopped recording. Recorded {self.frame_count} frames over {duration:.2f} seconds."
+            f"Stopped recording. Recorded {self.frame_count} frames over {duration_sec:.2f} seconds."
         )
         # Reset state
         self.current_session_dir = None
@@ -143,6 +140,7 @@ class DatasetRecorder:
 
     def sync_callback(self, *msgs) -> None:
         """Callback for synchronized messages"""
+        rospy.loginfo(f"{self.is_recording}  {rospy.Time.now().to_sec()}  {self.last_sync_time.to_sec()}")
         if not self.is_recording:
             return
 
@@ -153,7 +151,7 @@ class DatasetRecorder:
             frame_id_str = f"{self.frame_count:06d}" # e.g., 000000, 000001
             frame_info = {
                 "frame_id": frame_id_str,
-                "timestamp": rospy.Time.now().to_sec(),
+                "timestamp": current_time.to_sec(),
             }
             try:
                 frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)

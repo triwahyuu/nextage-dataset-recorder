@@ -5,8 +5,7 @@ import tf.transformations as tfs
 import numpy as np
 from sensor_msgs.msg import JointState
 
-from dataset_recorder.utils import map_subinfo_to_idx
-from dataset_recorder.msg import RobotBoolState
+from robot_teleop.msg import RobotBoolState
 
 
 class RobotStateRecorder:
@@ -20,10 +19,12 @@ class RobotStateRecorder:
         Args:
             output_dir (str): The base directory where data will be saved.
         """
-        rospy.loginfo(f"Initializing Kinect Recorder...")
+        rospy.loginfo(f"Initializing Robot State Recorder...")
 
-        self.joint_state_topic: str = rospy.get_param("~robot_state_topic", "/joint_states").lstrip('/')
-        self.gripper_state_topic: str = rospy.get_param("~gripper_state_topic", "/robot_gripper_state").lstrip('/')
+        joint_state_topic = rospy.get_param("~robot_state_topic", "/joint_states").lstrip('/')
+        self.joint_state_topic: str = f"/{joint_state_topic}"
+        grip_state_topic = rospy.get_param("~gripper_state_topic", "/robot_gripper_state").lstrip('/')
+        self.gripper_state_topic: str = f"/{grip_state_topic}"
 
         self.left_eef_tf = rospy.get_param("~left_eef_tf_name", "LARM_LINK_EEF")
         self.right_eef_tf = rospy.get_param("~right_eef_tf_name", "RARM_LINK_EEF")
@@ -44,12 +45,12 @@ class RobotStateRecorder:
         subscribers.append(self.joint_state_sub)
         subscriber_info.append({"name": self.joint_info_name, "type": JointState})
 
-        self.gripper_state_sub = message_filters.Subscriber(self.joint_state_topic, RobotBoolState)
+        self.gripper_state_sub = message_filters.Subscriber(self.gripper_state_topic, RobotBoolState)
         self.gripper_info_name = f"robot_state/gripper"
         subscribers.append(self.gripper_state_sub)
         subscriber_info.append({"name": self.gripper_info_name, "type": RobotBoolState})
 
-        msg: JointState = rospy.wait_for_message(self.joint_state_topic, JointState, timeout=1)
+        msg: JointState = rospy.wait_for_message(self.joint_state_topic, JointState, timeout=5)
         self.joint_names = list(msg.name)
 
     def set_msg_idx_map(self, idx_map: dict):
@@ -129,6 +130,8 @@ class RobotStateRecorder:
 
 
 if __name__ == "__main__":
+    from dataset_recorder.utils import map_subinfo_to_idx
+
     rospy.init_node("robot_recorder", anonymous=True)
     recorder = RobotStateRecorder()
 
