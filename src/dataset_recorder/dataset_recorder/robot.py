@@ -50,8 +50,19 @@ class RobotStateRecorder:
         subscribers.append(self.gripper_state_sub)
         subscriber_info.append({"name": self.gripper_info_name, "type": RobotBoolState})
 
-        msg: JointState = rospy.wait_for_message(self.joint_state_topic, JointState, timeout=5)
-        self.joint_names = list(msg.name)
+        try:
+            msg: JointState = rospy.wait_for_message(self.joint_state_topic, JointState, timeout=1)
+            self.joint_names = list(msg.name)
+        except rospy.exceptions.ROSException as e:
+            rospy.logerr(f"Topic '{self.joint_state_topic}' is not available. Make sure to run robot driver.")
+            raise
+
+        # check topic dependencies
+        try:
+            rospy.wait_for_message(self.gripper_state_topic, RobotBoolState, timeout=1)
+        except:
+            rospy.logerr(f"Topic '{self.gripper_state_topic}' is not available. Make sure to run teleop node.")
+            raise
 
     def set_msg_idx_map(self, idx_map: dict):
         self.msg_idx_map = idx_map
