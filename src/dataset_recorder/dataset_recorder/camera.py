@@ -5,7 +5,6 @@ from typing import List
 from pathlib import Path
 
 import rospy
-import message_filters
 import sensor_msgs.point_cloud2 as pc2
 import tf2_ros
 import tf2_sensor_msgs
@@ -13,12 +12,69 @@ from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 from cv_bridge import CvBridge
 
 
+class TopicSubscriber:
+    def __init__(self, topic_name, message_type):
+        """
+        Initializes the subscriber.
+
+        Args:
+            topic_name (str): The name of the topic to subscribe to.
+            message_type (ROS Message): The type of the message for the topic.
+                                      Example: from std_msgs.msg import String
+        """
+        self.latest_message = None
+        self.last_message_time = None
+        self.topic_name = topic_name
+        self.message_type = message_type
+
+        try:
+            self.subscriber = rospy.Subscriber(
+                self.topic_name, self.message_type, self._callback
+            )
+            rospy.loginfo(f"Subscribed to topic: {self.topic_name}")
+
+        except rospy.ROSInterruptException:
+            rospy.logerr("ROS Interrupt Exception during subscriber initialization.")
+        except Exception as e:
+            rospy.logerr(f"Failed to create subscriber for {self.topic_name}: {e}")
+
+    def _callback(self, msg):
+        """
+        Callback function to process incoming messages.
+        Stores the message and the timestamp of its reception.
+        """
+        self.latest_message = msg
+        if hasattr(msg, 'header') and hasattr(msg.header, 'stamp'):
+            self.last_message_time = msg.header.stamp
+        else:
+            self.last_message_time = rospy.Time.now()
+        # rospy.logdebug(f"Received message on {self.topic_name}")
+
+    def get_message(self):
+        """
+        Retrieves the latest message and the time interval since it was received.
+        """
+        if self.latest_message is None or self.last_message_time is None:
+            return None, None
+
+        current_time = rospy.Time.now()
+        time_interval = (current_time - self.last_message_time).to_sec()
+        return self.latest_message, time_interval
+
+    def unregister(self):
+        """
+        Unregisters the subscriber.
+        """
+        self.subscriber.unregister()
+        rospy.loginfo(f"Unsubscribed from topic: {self.topic_name}")
+
+
 class KinectRecorder:
     """
     Handles recording RGB images and PointCloud2 data from a Kinect-like
     sensor running in ROS to a specified directory.
     """
-    def __init__(self, output_dir, node_ns):
+    def __init__(self, output_dir, node_ns, rate=10, slop=0.1):
         """
         Initializes the recorder.
 
@@ -30,6 +86,9 @@ class KinectRecorder:
 
         self.node_ns = f"{node_ns}"
         self.output_dir = Path(output_dir).joinpath(node_ns).resolve()
+        self.sync_period = 1.0 / rate
+        self.slop = slop
+        self.max_interval = self.sync_period + self.slop
 
         img_topic = rospy.get_param("~image_topic", "/rgb/image_raw").lstrip('/')
         self.image_topic_name = f"/{self.node_ns}/{img_topic}"
@@ -78,21 +137,11 @@ class KinectRecorder:
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
-        self.image_sub = message_filters.Subscriber(self.image_topic_name, Image)
-        subscribers.append(self.image_sub)
-        subscriber_info.append({"name": self.img_info_name, "type": Image})
+        self.image_sub = TopicSubscriber(self.image_topic_name, Image)
+        self.depth_sub = TopicSubscriber(self.depth_topic_name, Image)
+        self.depth_reg_sub = TopicSubscriber(self.depth_reg_topic_name, Image)
+        self.pc_sub = TopicSubscriber(self.pc_topic_name, PointCloud2)
 
-        self.depth_sub = message_filters.Subscriber(self.depth_topic_name, Image)
-        subscribers.append(self.depth_sub)
-        subscriber_info.append({"name": self.depth_info_name, "type": Image})
-
-        self.depth_reg_sub = message_filters.Subscriber(self.depth_reg_topic_name, Image)
-        subscribers.append(self.depth_reg_sub)
-        subscriber_info.append({"name": self.depth_reg_info_name, "type": Image})
-
-        self.pc_sub = message_filters.Subscriber(self.pc_topic_name, PointCloud2)
-        subscribers.append(self.pc_sub)
-        subscriber_info.append({"name": self.pc_info_name, "type": PointCloud2})
         self.pcd_frameid = f"{self.node_ns}_rgb_camera_link"
         self.pcd2base = None
 
@@ -128,7 +177,7 @@ class KinectRecorder:
                 base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1) # Short timeout
             )
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"[KinectRecorder.{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
             return None
         return transform_stamped
 
@@ -171,6 +220,15 @@ class KinectRecorder:
                 "do_rectify": msg.roi.do_rectify,
             },
         }
+    
+    def _get_sub_msg(self, sub):
+        msg, interval = sub.get_message()
+        if msg is None:
+            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] No message in {self.image_sub.topic_name} is received!")
+            return None
+        if interval > self.max_interval:
+            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Message in {self.image_sub.topic_name} is too old!")
+        return msg
 
     def save_image(self, msgs: list, frame_id: str) -> str:
         """Save image message to disk as PNG"""
@@ -178,7 +236,10 @@ class KinectRecorder:
         filepath = self.image_dir / filename
 
         try:
-            msg: Image = msgs[self.msg_idx_map[self.img_info_name]]
+            msg: Image = self._get_sub_msg(self.image_sub)
+            if msg is None:
+                return None
+
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             cv2.imwrite(str(filepath), cv_image)
             return filepath
@@ -194,11 +255,15 @@ class KinectRecorder:
         filepath_reg = self.depth_dir / filename_reg
 
         try:
-            msg: Image = msgs[self.msg_idx_map[self.depth_info_name]]
+            msg: Image = self._get_sub_msg(self.depth_sub)
+            if msg is None:
+                return None
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             cv2.imwrite(str(filepath), cv_image)
 
-            msg: Image = msgs[self.msg_idx_map[self.depth_reg_info_name]]
+            msg: Image = self._get_sub_msg(self.depth_reg_sub)
+            if msg is None:
+                return None
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             cv2.imwrite(str(filepath_reg), cv_image)
             return filepath_reg
@@ -212,8 +277,10 @@ class KinectRecorder:
         filepath = self.pc_dir / filename
 
         try:
-            # Convert PointCloud2 to numpy array
-            msg: PointCloud2 = msgs[self.msg_idx_map[self.pc_info_name]]
+            msg: PointCloud2 = self._get_sub_msg(self.pc_sub)
+            if msg is None:
+                return None
+
             if self.pcd_frameid != msg.header.frame_id:
                 self.pcd_frameid = msg.header.frame_id
                 self.pcd2base = self.get_pose_tf(self.pcd_frameid, self.base_frame)
@@ -288,8 +355,5 @@ if __name__ == "__main__":
         except Exception as e:
             rospy.logerr(f"Error saving data: {e}")
 
-    ts = message_filters.ApproximateTimeSynchronizer(
-        subs, queue_size=10, slop=0.1
-    )
-    ts.registerCallback(sync_callback)
+    rospy.Timer(rospy.Duration(0.1), sync_callback)
     rospy.spin()
