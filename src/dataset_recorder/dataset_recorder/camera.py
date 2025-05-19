@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import json
 
 from typing import List
 from pathlib import Path
@@ -48,7 +49,7 @@ class TopicSubscriber:
             self.last_message_time = msg.header.stamp
         else:
             self.last_message_time = rospy.Time.now()
-        # rospy.logdebug(f"Received message on {self.topic_name}")
+        rospy.loginfo(f"Received message on {self.topic_name}")
 
     def get_message(self):
         """
@@ -85,7 +86,6 @@ class KinectRecorder:
         rospy.loginfo(f"Initializing Kinect Recorder '{node_ns}'...")
 
         self.node_ns = f"{node_ns}"
-        self.output_dir = Path(output_dir).joinpath(node_ns).resolve()
         self.sync_period = 1.0 / rate
         self.slop = slop
         self.max_interval = self.sync_period + self.slop
@@ -112,13 +112,6 @@ class KinectRecorder:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.camera_pose_tf = None
 
-        self.image_dir = self.output_dir / "rgb"
-        self.depth_dir = self.output_dir / "depth"
-        self.pc_dir = self.output_dir / "point_cloud"
-        self.image_dir.mkdir(parents=True, exist_ok=True)
-        self.depth_dir.mkdir(parents=True, exist_ok=True)
-        self.pc_dir.mkdir(parents=True, exist_ok=True)
-
         self.bridge = CvBridge()
         self.image_sub = None
         self.pc_sub = None
@@ -135,15 +128,25 @@ class KinectRecorder:
         self.depth_caminfo_topic = f"/{self.node_ns}/{depth_caminfo_topic}"
         self.depth_caminfo = None
 
+    def reset_output_dir(self, output_dir):
+        self.base_dir = Path(output_dir)
+        self.output_dir = self.base_dir.joinpath(self.node_ns).resolve()
+
+        self.image_dir = self.output_dir / "rgb"
+        self.depth_dir = self.output_dir / "depth"
+        self.pc_dir = self.output_dir / "point_cloud"
+        self.image_dir.mkdir(parents=True, exist_ok=True)
+        self.depth_dir.mkdir(parents=True, exist_ok=True)
+        self.pc_dir.mkdir(parents=True, exist_ok=True)
+
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
         self.image_sub = TopicSubscriber(self.image_topic_name, Image)
-        self.depth_sub = TopicSubscriber(self.depth_topic_name, Image)
-        self.depth_reg_sub = TopicSubscriber(self.depth_reg_topic_name, Image)
-        self.pc_sub = TopicSubscriber(self.pc_topic_name, PointCloud2)
+        # self.depth_sub = TopicSubscriber(self.depth_topic_name, Image)
+        # self.depth_reg_sub = TopicSubscriber(self.depth_reg_topic_name, Image)
+        # self.pc_sub = TopicSubscriber(self.pc_topic_name, PointCloud2)
 
         self.pcd_frameid = f"{self.node_ns}_rgb_camera_link"
-        self.pcd2base = None
 
         rgb_caminfo = rospy.wait_for_message(self.rgb_caminfo_topic, CameraInfo, timeout=1)
         self.rgb_caminfo = self.caminfo_to_dict(rgb_caminfo)
@@ -221,14 +224,44 @@ class KinectRecorder:
             },
         }
     
-    def _get_sub_msg(self, sub):
+    def _get_sub_msg(self, sub: TopicSubscriber):
         msg, interval = sub.get_message()
         if msg is None:
             rospy.logwarn(f"[KinectRecorder/{self.node_ns}] No message in {self.image_sub.topic_name} is received!")
             return None
         if interval > self.max_interval:
-            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Message in {self.image_sub.topic_name} is too old!")
+            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Message in {self.image_sub.topic_name} is too old! {interval} s")
         return msg
+
+    def _save_img_msg(self, msg: Image, filepath: Path):
+        raw_data_filename = filepath.with_suffix(".bin")
+        metadata_filename = filepath.with_suffix(".json")
+
+        # Save raw pixel data
+        with open(raw_data_filename, 'wb') as f_raw:
+            f_raw.write(msg.data)
+
+        metadata = {
+            "header": {
+                "seq": msg.header.seq,
+                "stamp": {
+                    "secs": msg.header.stamp.secs,
+                    "nsecs": msg.header.stamp.nsecs
+                },
+                "frame_id": msg.header.frame_id
+            },
+            "height": msg.height,
+            "width": msg.width,
+            "encoding": msg.encoding,
+            "is_bigendian": msg.is_bigendian,
+            "step": msg.step, # Full row length in bytes
+            "data_length": len(msg.data) # For verification, should be height * step
+        }
+
+        # 3. Save metadata to a JSON file
+        with open(metadata_filename, 'w') as f_meta:
+            json.dump(metadata, f_meta, indent=4)
+        return raw_data_filename
 
     def save_image(self, msgs: list, frame_id: str) -> str:
         """Save image message to disk as PNG"""
@@ -242,7 +275,8 @@ class KinectRecorder:
 
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             cv2.imwrite(str(filepath), cv_image)
-            return filepath
+            # filepath = self._save_img_msg(msg, filepath)
+            return str(filepath.relative_to(self.base_dir))
         except Exception as e:
             rospy.logerr(f"Failed to save image frame {frame_id}: {e}")
             raise
@@ -266,7 +300,7 @@ class KinectRecorder:
                 return None
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             cv2.imwrite(str(filepath_reg), cv_image)
-            return filepath_reg
+            return str(filepath_reg.relative_to(self.base_dir))
         except Exception as e:
             rospy.logerr(f"Failed to save depth frame {frame_id}: {e}")
             raise
@@ -284,11 +318,11 @@ class KinectRecorder:
             if self.pcd_frameid != msg.header.frame_id:
                 self.pcd_frameid = msg.header.frame_id
                 self.pcd2base = self.get_pose_tf(self.pcd_frameid, self.base_frame)
-            transformed_msg = tf2_sensor_msgs.do_transform_cloud(msg, self.pcd2base)
-            pc_data = pc2.read_points(transformed_msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
+            # transformed_msg = tf2_sensor_msgs.do_transform_cloud(msg, self.pcd2base)
+            pc_data = pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
             pc_array = np.array(list(pc_data))
             np.save(filepath, pc_array)
-            return filepath
+            return str(filepath.relative_to(self.base_dir))
         except Exception as e:
             rospy.logerr(f"Failed to save pointcloud frame {frame_id}: {e}")
             raise
@@ -300,6 +334,11 @@ class DualKinectRecorder:
 
         self.left_recorder = KinectRecorder(output_dir, "kinect_left", rate, slop)
         self.right_recorder = KinectRecorder(output_dir, "kinect_right", rate, slop)
+
+    def reset_output_dir(self, output_dir):
+        self.base_dir = Path(output_dir)
+        self.left_recorder.reset_output_dir(output_dir)
+        self.right_recorder.reset_output_dir(output_dir)
 
     def setup(self, subscribers: list, subscriber_info: list):
         self.left_recorder.setup(subscribers, subscriber_info)

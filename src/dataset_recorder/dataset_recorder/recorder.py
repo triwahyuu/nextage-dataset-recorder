@@ -21,8 +21,8 @@ class DatasetRecorder:
         self.base_save_dir: Path = Path(
             rospy.get_param("~save_dir", "/tmp/dataset_recordings")
         )
-        sync_rate: float = rospy.get_param("~sync_rate", 10.0)
-        self.sync_period = rospy.Duration(1.0 / sync_rate)
+        self.sync_rate: float = rospy.get_param("~sync_rate", 10.0)
+        self.sync_period = rospy.Duration(1.0 / self.sync_rate)
         self.queue_size = rospy.get_param("~queue_size", 10)
         self.slop = rospy.get_param("~slop", 1)
 
@@ -35,9 +35,6 @@ class DatasetRecorder:
         self.manifest_data = []
         self.attribute_data = {}
 
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.current_session_dir: Path = self.base_save_dir / f"{timestamp}"
-
         # Setup service
         self.record_service = rospy.Service("~start", Trigger, self.handle_start_recording)
         self.stop_service = rospy.Service("~stop", Trigger, self.handle_stop_recording)
@@ -46,7 +43,7 @@ class DatasetRecorder:
         self.subscribers = []
         self.subscriber_info = [] # Keep track of topic name and type for callback mapping
 
-        self.camera = DualKinectRecorder(self.current_session_dir, rate=sync_rate, slop=self.slop)
+        self.camera = DualKinectRecorder(self.base_save_dir, rate=self.sync_rate, slop=self.slop)
         self.robot = RobotStateRecorder()
 
         # --- Setup Synchronizer ---
@@ -63,7 +60,7 @@ class DatasetRecorder:
         self.ts.registerCallback(self.sync_callback)
         # ---
 
-        rospy.loginfo(f"Dataset recorder initialized. Saving to '{self.current_session_dir}'")
+        rospy.loginfo("Dataset recorder initialized.")
         rospy.loginfo("Waiting for trigger to start recording.")
 
 
@@ -72,7 +69,11 @@ class DatasetRecorder:
         if self.is_recording:
             return TriggerResponse(success=False, message="Already recording")
 
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        self.current_session_dir: Path = self.base_save_dir / f"{timestamp}"
         self.current_session_dir.mkdir(parents=True, exist_ok=True)
+
+        self.camera.reset_output_dir(self.current_session_dir)
 
         # Reset manifest data and get attributes
         self.manifest_data = []
@@ -140,12 +141,14 @@ class DatasetRecorder:
 
     def sync_callback(self, *msgs) -> None:
         """Callback for synchronized messages"""
-        rospy.loginfo(f"{self.is_recording}  {rospy.Time.now().to_sec()}  {self.last_sync_time.to_sec()}")
+        # rospy.loginfo(f"{self.is_recording}  {rospy.Time.now().to_sec()}  {self.last_sync_time.to_sec()}")
         if not self.is_recording:
             return
 
         current_time = rospy.Time.now() # Use a consistent time for check
-        if current_time - self.last_sync_time >= self.sync_period:
+        interval = current_time - self.last_sync_time
+        # rospy.loginfo(f"{interval.to_sec()}  {self.sync_period.to_sec()}")
+        if interval >= self.sync_period:
             self.last_sync_time = current_time
 
             frame_id_str = f"{self.frame_count:06d}" # e.g., 000000, 000001
@@ -162,7 +165,7 @@ class DatasetRecorder:
                 self.manifest_data.append(frame_info)
 
                 self.frame_count += 1
-                rospy.loginfo_throttle(2, f"Recorded frame {self.frame_count}")
+                rospy.loginfo(f"Recorded frame {self.frame_count}  {(rospy.Time.now() - current_time).to_sec()}")
 
             except Exception as e:
                 rospy.logerr(f"Error saving data for frame {self.frame_count}: {e}", exc_info=True)
