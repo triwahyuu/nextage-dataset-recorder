@@ -295,11 +295,11 @@ class KinectRecorder:
 
 
 class DualKinectRecorder:
-    def __init__(self, output_dir):
+    def __init__(self, output_dir, rate=10, slop=0.1):
         self.base_dir = Path(output_dir)
 
-        self.left_recorder = KinectRecorder(output_dir, "kinect_left")
-        self.right_recorder = KinectRecorder(output_dir, "kinect_right")
+        self.left_recorder = KinectRecorder(output_dir, "kinect_left", rate, slop)
+        self.right_recorder = KinectRecorder(output_dir, "kinect_right", rate, slop)
 
     def setup(self, subscribers: list, subscriber_info: list):
         self.left_recorder.setup(subscribers, subscriber_info)

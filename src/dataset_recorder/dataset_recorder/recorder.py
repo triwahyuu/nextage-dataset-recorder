@@ -46,7 +46,7 @@ class DatasetRecorder:
         self.subscribers = []
         self.subscriber_info = [] # Keep track of topic name and type for callback mapping
 
-        self.camera = DualKinectRecorder(self.current_session_dir)
+        self.camera = DualKinectRecorder(self.current_session_dir, rate=sync_rate, slop=self.slop)
         self.robot = RobotStateRecorder()
 
         # --- Setup Synchronizer ---
