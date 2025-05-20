@@ -92,19 +92,15 @@ class KinectRecorder:
 
         img_topic = rospy.get_param("~image_topic", "/rgb/image_raw").lstrip('/')
         self.image_topic_name = f"/{self.node_ns}/{img_topic}"
-        self.img_info_name = f"{self.node_ns}/image"
 
         depth_topic = rospy.get_param("~depth_topic", "/depth/image_raw").lstrip('/')
         self.depth_topic_name = f"/{self.node_ns}/{depth_topic}"
-        self.depth_info_name = f"{self.node_ns}/depth"
 
         depth_reg_topic = rospy.get_param("~depth_reg_topic", "/depth_to_rgb/hw_registered/image_rect_raw").lstrip('/')
         self.depth_reg_topic_name = f"/{self.node_ns}/{depth_reg_topic}"
-        self.depth_reg_info_name = f"{self.node_ns}/depth_reg"
 
         pc_topic = rospy.get_param("~pointcloud_topic", "/points2").lstrip('/')
         self.pc_topic_name = f"/{self.node_ns}/{pc_topic}"
-        self.pc_info_name = f"{self.node_ns}/pointcloud"
 
         self.tf_name = f"{node_ns}_camera_base"
         self.base_frame = "WAIST"
@@ -117,9 +113,6 @@ class KinectRecorder:
         self.pc_sub = None
         self.msg_idx_map = {}
 
-        self.rgb_count = 0
-        self.pc_count = 0
-
         rgb_caminfo_topic = rospy.get_param("~rgb_caminfo_topic", "/rgb/camera_info").lstrip('/')
         self.rgb_caminfo_topic = f"/{self.node_ns}/{rgb_caminfo_topic}"
         self.rgb_caminfo = None
@@ -127,6 +120,8 @@ class KinectRecorder:
         depth_caminfo_topic = rospy.get_param("~depth_caminfo_topic", "/depth/camera_info").lstrip('/')
         self.depth_caminfo_topic = f"/{self.node_ns}/{depth_caminfo_topic}"
         self.depth_caminfo = None
+
+        self.base_dir = Path(output_dir)
 
     def reset_output_dir(self, output_dir):
         self.base_dir = Path(output_dir)
