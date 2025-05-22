@@ -12,6 +12,7 @@ class RobotStateRecorder:
     """
     Handles recording of robot states: joint state, end-effector pose, gripper states.
     """
+
     def __init__(self):
         """
         Initializes the recorder.
@@ -21,9 +22,13 @@ class RobotStateRecorder:
         """
         rospy.loginfo(f"Initializing Robot State Recorder...")
 
-        joint_state_topic = rospy.get_param("~robot_state_topic", "/joint_states").lstrip('/')
+        joint_state_topic = rospy.get_param(
+            "~robot_state_topic", "/joint_states"
+        ).lstrip("/")
         self.joint_state_topic: str = f"/{joint_state_topic}"
-        grip_state_topic = rospy.get_param("~gripper_state_topic", "/robot_gripper_state").lstrip('/')
+        grip_state_topic = rospy.get_param(
+            "~gripper_state_topic", "/robot_gripper_state"
+        ).lstrip("/")
         self.gripper_state_topic: str = f"/{grip_state_topic}"
 
         self.left_eef_tf = rospy.get_param("~left_eef_tf_name", "LARM_LINK_EEF")
@@ -40,28 +45,38 @@ class RobotStateRecorder:
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
-        self.joint_state_sub = message_filters.Subscriber(self.joint_state_topic, JointState)
+        self.joint_state_sub = message_filters.Subscriber(
+            self.joint_state_topic, JointState
+        )
         self.joint_info_name = f"robot_state/joint"
         subscribers.append(self.joint_state_sub)
         subscriber_info.append({"name": self.joint_info_name, "type": JointState})
 
-        self.gripper_state_sub = message_filters.Subscriber(self.gripper_state_topic, RobotBoolState)
+        self.gripper_state_sub = message_filters.Subscriber(
+            self.gripper_state_topic, RobotBoolState
+        )
         self.gripper_info_name = f"robot_state/gripper"
         subscribers.append(self.gripper_state_sub)
         subscriber_info.append({"name": self.gripper_info_name, "type": RobotBoolState})
 
         try:
-            msg: JointState = rospy.wait_for_message(self.joint_state_topic, JointState, timeout=1)
+            msg: JointState = rospy.wait_for_message(
+                self.joint_state_topic, JointState, timeout=1
+            )
             self.joint_names = list(msg.name)
         except rospy.exceptions.ROSException as e:
-            rospy.logerr(f"Topic '{self.joint_state_topic}' is not available. Make sure to run robot driver.")
+            rospy.logerr(
+                f"Topic '{self.joint_state_topic}' is not available. Make sure to run robot driver."
+            )
             raise
 
         # check topic dependencies
         try:
             rospy.wait_for_message(self.gripper_state_topic, RobotBoolState, timeout=1)
         except:
-            rospy.logerr(f"Topic '{self.gripper_state_topic}' is not available. Make sure to run teleop node.")
+            rospy.logerr(
+                f"Topic '{self.gripper_state_topic}' is not available. Make sure to run teleop node."
+            )
             raise
 
     def set_msg_idx_map(self, idx_map: dict):
@@ -72,7 +87,7 @@ class RobotStateRecorder:
             "joint_names": self.joint_names,
             "left_eef_tf": self.left_eef_tf,
             "right_eef_tf": self.right_eef_tf,
-            "world_tf": self.world_tf
+            "world_tf": self.world_tf,
         }
 
     def get_pose_tf(self, tf_name: str, base_frame: str) -> tf2_ros.TransformStamped:
@@ -80,8 +95,14 @@ class RobotStateRecorder:
             tf_stamped: tf2_ros.TransformStamped = self.tf_buffer.lookup_transform(
                 base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1)
             )
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"[RobotStateRecorder] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+        except (
+            tf2_ros.LookupException,
+            tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException,
+        ) as e:
+            rospy.logwarn(
+                f"[RobotStateRecorder] Could not get transform from '{base_frame}' to '{tf_name}': {e}"
+            )
             return None
         return tf_stamped
 
@@ -89,23 +110,23 @@ class RobotStateRecorder:
         tfstamped = self.get_pose_tf(tf_name, base_frame)
         if tfs is None:
             return None
-        
+
         translation = [
             tfstamped.transform.translation.x,
             tfstamped.transform.translation.y,
-            tfstamped.transform.translation.z
+            tfstamped.transform.translation.z,
         ]
-    
+
         rotation_quat = [
             tfstamped.transform.rotation.x,
             tfstamped.transform.rotation.y,
             tfstamped.transform.rotation.z,
-            tfstamped.transform.rotation.w
+            tfstamped.transform.rotation.w,
         ]
 
         trans_mat = tfs.translation_matrix(translation)
         rot_mat = tfs.quaternion_matrix(rotation_quat)
-        
+
         # Combine the translation and rotation matrices
         # M = T * R
         tf_matrix = np.dot(trans_mat, rot_mat)
@@ -122,9 +143,15 @@ class RobotStateRecorder:
             right_eef = self.get_pose_tf_mat(self.right_eef_tf, self.world_tf)
 
             joint_states = {
-                "pos": list(joint_msg.position) if joint_msg.position is not None else [],
-                "vel": list(joint_msg.velocity) if joint_msg.velocity is not None else [],
-                "effort": list(joint_msg.effort) if joint_msg.effort is not None else [],
+                "pos": (
+                    list(joint_msg.position) if joint_msg.position is not None else []
+                ),
+                "vel": (
+                    list(joint_msg.velocity) if joint_msg.velocity is not None else []
+                ),
+                "effort": (
+                    list(joint_msg.effort) if joint_msg.effort is not None else []
+                ),
             }
 
             state_dict = {
@@ -132,7 +159,7 @@ class RobotStateRecorder:
                 "left_eef": left_eef,
                 "right_eef": right_eef,
                 "left_gripper": bool(gripper_msg.left_gripper),
-                "right_gripper": bool(gripper_msg.right_gripper)
+                "right_gripper": bool(gripper_msg.right_gripper),
             }
             return state_dict
         except Exception as e:
@@ -163,8 +190,6 @@ if __name__ == "__main__":
         except Exception as e:
             rospy.logerr(f"Error saving data: {e}")
 
-    ts = message_filters.ApproximateTimeSynchronizer(
-        subs, queue_size=10, slop=0.1
-    )
+    ts = message_filters.ApproximateTimeSynchronizer(subs, queue_size=10, slop=0.1)
     ts.registerCallback(sync_callback)
     rospy.spin()

@@ -40,11 +40,6 @@ roslaunch dataset_recorder dataset_recorder.launch save_dir:=/path/to/save/data 
 
 ### Available parameters
 
-- `save_dir`: Directory to save recorded data (default: ~/dataset_recordings)
-- `image_topic`: Topic for image data (default: /camera/rgb/image_raw)
-- `pointcloud_topic`: Topic for point cloud data (default: /camera/depth/points)
-- `robot_state_topic`: Topic for robot state data (default: /robot/state)
-- `sync_mode`: Whether to synchronize data from different topics (default: false)
 
 ### Start and stop recording
 

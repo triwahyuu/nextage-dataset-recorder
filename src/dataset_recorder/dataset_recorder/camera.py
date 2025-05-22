@@ -45,7 +45,7 @@ class TopicSubscriber:
         Stores the message and the timestamp of its reception.
         """
         self.latest_message = msg
-        if hasattr(msg, 'header') and hasattr(msg.header, 'stamp'):
+        if hasattr(msg, "header") and hasattr(msg.header, "stamp"):
             self.last_message_time = msg.header.stamp
         else:
             self.last_message_time = rospy.Time.now()
@@ -75,6 +75,7 @@ class KinectRecorder:
     Handles recording RGB images and PointCloud2 data from a Kinect-like
     sensor running in ROS to a specified directory.
     """
+
     def __init__(self, output_dir, node_ns, rate=10, slop=0.1):
         """
         Initializes the recorder.
@@ -90,16 +91,18 @@ class KinectRecorder:
         self.slop = slop
         self.max_interval = self.sync_period + self.slop
 
-        img_topic = rospy.get_param("~image_topic", "/rgb/image_raw").lstrip('/')
+        img_topic = rospy.get_param("~image_topic", "/rgb/image_raw").lstrip("/")
         self.image_topic_name = f"/{self.node_ns}/{img_topic}"
 
-        depth_topic = rospy.get_param("~depth_topic", "/depth/image_raw").lstrip('/')
+        depth_topic = rospy.get_param("~depth_topic", "/depth/image_raw").lstrip("/")
         self.depth_topic_name = f"/{self.node_ns}/{depth_topic}"
 
-        depth_reg_topic = rospy.get_param("~depth_reg_topic", "/depth_to_rgb/hw_registered/image_rect_raw").lstrip('/')
+        depth_reg_topic = rospy.get_param(
+            "~depth_reg_topic", "/depth_to_rgb/hw_registered/image_rect"
+        ).lstrip("/")
         self.depth_reg_topic_name = f"/{self.node_ns}/{depth_reg_topic}"
 
-        pc_topic = rospy.get_param("~pointcloud_topic", "/points2").lstrip('/')
+        pc_topic = rospy.get_param("~pointcloud_topic", "/points2").lstrip("/")
         self.pc_topic_name = f"/{self.node_ns}/{pc_topic}"
 
         self.tf_name = f"{node_ns}_camera_base"
@@ -113,11 +116,15 @@ class KinectRecorder:
         self.pc_sub = None
         self.msg_idx_map = {}
 
-        rgb_caminfo_topic = rospy.get_param("~rgb_caminfo_topic", "/rgb/camera_info").lstrip('/')
+        rgb_caminfo_topic = rospy.get_param(
+            "~rgb_caminfo_topic", "/rgb/camera_info"
+        ).lstrip("/")
         self.rgb_caminfo_topic = f"/{self.node_ns}/{rgb_caminfo_topic}"
         self.rgb_caminfo = None
 
-        depth_caminfo_topic = rospy.get_param("~depth_caminfo_topic", "/depth/camera_info").lstrip('/')
+        depth_caminfo_topic = rospy.get_param(
+            "~depth_caminfo_topic", "/depth/camera_info"
+        ).lstrip("/")
         self.depth_caminfo_topic = f"/{self.node_ns}/{depth_caminfo_topic}"
         self.depth_caminfo = None
 
@@ -143,10 +150,14 @@ class KinectRecorder:
 
         self.pcd_frameid = f"{self.node_ns}_rgb_camera_link"
 
-        rgb_caminfo = rospy.wait_for_message(self.rgb_caminfo_topic, CameraInfo, timeout=1)
+        rgb_caminfo = rospy.wait_for_message(
+            self.rgb_caminfo_topic, CameraInfo, timeout=1
+        )
         self.rgb_caminfo = self.caminfo_to_dict(rgb_caminfo)
 
-        depth_caminfo = rospy.wait_for_message(self.depth_caminfo_topic, CameraInfo, timeout=1)
+        depth_caminfo = rospy.wait_for_message(
+            self.depth_caminfo_topic, CameraInfo, timeout=1
+        )
         self.depth_caminfo = self.caminfo_to_dict(depth_caminfo)
 
         self.camera_pose_tf = self.get_camera_pose()
@@ -165,17 +176,28 @@ class KinectRecorder:
                 "rgb": self.rgb_caminfo,
                 "depth": self.depth_caminfo,
             },
-            "pcd_frame": self.base_frame
+            "pcd_frame": self.base_frame,
         }
 
     def get_pose_tf(self, tf_name: str, base_frame: str) -> tf2_ros.TransformStamped:
         try:
             # Get the latest transform from base_frame to the camera's frame
-            transform_stamped: tf2_ros.TransformStamped = self.tf_buffer.lookup_transform(
-                base_frame, tf_name, rospy.Time(0), rospy.Duration(0.1) # Short timeout
+            transform_stamped: tf2_ros.TransformStamped = (
+                self.tf_buffer.lookup_transform(
+                    base_frame,
+                    tf_name,
+                    rospy.Time(0),
+                    rospy.Duration(0.1),  # Short timeout
+                )
             )
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}")
+        except (
+            tf2_ros.LookupException,
+            tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException,
+        ) as e:
+            rospy.logwarn(
+                f"[KinectRecorder/{self.node_ns}] Could not get transform from '{base_frame}' to '{tf_name}': {e}"
+            )
             return None
         return transform_stamped
 
@@ -185,17 +207,30 @@ class KinectRecorder:
             return None
 
         return {
-                "base_frame_id": transform_stamped.header.frame_id,
-                "frame_id": transform_stamped.child_frame_id,
-                "translation": {"x": transform_stamped.transform.translation.x, "y": transform_stamped.transform.translation.y, "z": transform_stamped.transform.translation.z},
-                "rotation": {"x": transform_stamped.transform.rotation.x, "y": transform_stamped.transform.rotation.y, "z": transform_stamped.transform.rotation.z, "w": transform_stamped.transform.rotation.w}
-            }
+            "base_frame_id": transform_stamped.header.frame_id,
+            "frame_id": transform_stamped.child_frame_id,
+            "translation": {
+                "x": transform_stamped.transform.translation.x,
+                "y": transform_stamped.transform.translation.y,
+                "z": transform_stamped.transform.translation.z,
+            },
+            "rotation": {
+                "x": transform_stamped.transform.rotation.x,
+                "y": transform_stamped.transform.rotation.y,
+                "z": transform_stamped.transform.rotation.z,
+                "w": transform_stamped.transform.rotation.w,
+            },
+        }
 
     def get_camera_pose(self):
         return {
             "camera2world": self.get_pose_tf_dict(self.tf_name, self.base_frame),
-            "depth2camera": self.get_pose_tf_dict(f"{self.node_ns}_depth_camera_link", self.tf_name),
-            "rgb2camera": self.get_pose_tf_dict(f"{self.node_ns}_rgb_camera_link", self.tf_name),
+            "depth2camera": self.get_pose_tf_dict(
+                f"{self.node_ns}_depth_camera_link", self.tf_name
+            ),
+            "rgb2camera": self.get_pose_tf_dict(
+                f"{self.node_ns}_rgb_camera_link", self.tf_name
+            ),
         }
 
     @staticmethod
@@ -218,14 +253,18 @@ class KinectRecorder:
                 "do_rectify": msg.roi.do_rectify,
             },
         }
-    
+
     def _get_sub_msg(self, sub: TopicSubscriber):
         msg, interval = sub.get_message()
         if msg is None:
-            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] No message in {self.image_sub.topic_name} is received!")
+            rospy.logwarn(
+                f"[KinectRecorder/{self.node_ns}] No message in {self.image_sub.topic_name} is received!"
+            )
             return None
         if interval > self.max_interval:
-            rospy.logwarn(f"[KinectRecorder/{self.node_ns}] Message in {self.image_sub.topic_name} is too old! {interval} s")
+            rospy.logwarn(
+                f"[KinectRecorder/{self.node_ns}] Message in {self.image_sub.topic_name} is too old! {interval} s"
+            )
         return msg
 
     def _save_img_msg(self, msg: Image, filepath: Path):
@@ -233,7 +272,7 @@ class KinectRecorder:
         metadata_filename = filepath.with_suffix(".json")
 
         # Save raw pixel data
-        with open(raw_data_filename, 'wb') as f_raw:
+        with open(raw_data_filename, "wb") as f_raw:
             f_raw.write(msg.data)
 
         metadata = {
@@ -241,20 +280,20 @@ class KinectRecorder:
                 "seq": msg.header.seq,
                 "stamp": {
                     "secs": msg.header.stamp.secs,
-                    "nsecs": msg.header.stamp.nsecs
+                    "nsecs": msg.header.stamp.nsecs,
                 },
-                "frame_id": msg.header.frame_id
+                "frame_id": msg.header.frame_id,
             },
             "height": msg.height,
             "width": msg.width,
             "encoding": msg.encoding,
             "is_bigendian": msg.is_bigendian,
-            "step": msg.step, # Full row length in bytes
-            "data_length": len(msg.data) # For verification, should be height * step
+            "step": msg.step,  # Full row length in bytes
+            "data_length": len(msg.data),  # For verification, should be height * step
         }
 
         # 3. Save metadata to a JSON file
-        with open(metadata_filename, 'w') as f_meta:
+        with open(metadata_filename, "w") as f_meta:
             json.dump(metadata, f_meta, indent=4)
         return raw_data_filename
 
@@ -314,7 +353,9 @@ class KinectRecorder:
                 self.pcd_frameid = msg.header.frame_id
                 self.pcd2base = self.get_pose_tf(self.pcd_frameid, self.base_frame)
             # transformed_msg = tf2_sensor_msgs.do_transform_cloud(msg, self.pcd2base)
-            pc_data = pc2.read_points(msg, skip_nans=True, field_names=("x", "y", "z", "rgb"))
+            pc_data = pc2.read_points(
+                msg, skip_nans=True, field_names=("x", "y", "z", "rgb")
+            )
             pc_array = np.array(list(pc_data))
             np.save(filepath, pc_array)
             return str(filepath.relative_to(self.base_dir))
@@ -361,7 +402,7 @@ class DualKinectRecorder:
     def get_attributes(self):
         return {
             "left": self.left_recorder.get_attributes(),
-            "right": self.right_recorder.get_attributes()
+            "right": self.right_recorder.get_attributes(),
         }
 
 
@@ -369,7 +410,9 @@ if __name__ == "__main__":
     from dataset_recorder.utils import map_subinfo_to_idx
 
     rospy.init_node("kinect_recorder", anonymous=True)
-    output_dir = rospy.get_param("~output_dir", "/workspaces/dataset_recorder/playground/kinect_recordings")
+    output_dir = rospy.get_param(
+        "~output_dir", "/workspaces/dataset_recorder/playground/kinect_recordings"
+    )
     recorder = KinectRecorder(output_dir, "kinect_left")
 
     subs, sub_info = [], []
