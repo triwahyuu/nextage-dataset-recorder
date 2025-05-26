@@ -53,11 +53,11 @@ class DatasetRecorder:
         self.robot = RobotStateRecorder()
 
         # --- Setup Synchronizer ---
-        self.camera.setup(self.subscribers, self.subscriber_info)
+        # self.camera.setup(self.subscribers, self.subscriber_info)
         self.robot.setup(self.subscribers, self.subscriber_info)
 
         self.msg_idx_map = map_subinfo_to_idx(self.subscriber_info)
-        self.camera.set_msg_idx_map(self.msg_idx_map)
+        # self.camera.set_msg_idx_map(self.msg_idx_map)
         self.robot.set_msg_idx_map(self.msg_idx_map)
 
         self.ts = message_filters.ApproximateTimeSynchronizer(
@@ -88,6 +88,7 @@ class DatasetRecorder:
         self.attribute_data = {
             "camera": self.camera.get_attributes(),
             "robot": self.robot.get_attributes(),
+            "message_idx_map": self.msg_idx_map,
         }
 
         self.is_recording = True
@@ -180,9 +181,9 @@ class DatasetRecorder:
                 # frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
                 # frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
                 # frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
-                # frame_info["robot_states"] = self.robot.get_robot_state(
-                #     msgs, frame_id_str
-                # )
+                frame_info["robot_states"] = self.robot.get_robot_state(
+                    msgs, frame_id_str
+                )
                 msgs_path = self.msgs_dir / f"{frame_id_str}.pkl"
                 with open(msgs_path, "wb") as f:
                     pickle.dump(msgs, f)
