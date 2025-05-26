@@ -1,11 +1,11 @@
 import time
 import json
-from datetime import datetime
-from pathlib import Path
-
+import pickle
 import rospy
 import message_filters
 
+from datetime import datetime
+from pathlib import Path
 from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
 
 from dataset_recorder.camera import DualKinectRecorder
@@ -32,7 +32,7 @@ class DatasetRecorder:
         self.current_session_dir: Path = None
         self.frame_count: int = 0
         self.last_sync_time = rospy.Time(0)
-        self.manifest_data = []
+        self.frame_info = []
         self.attribute_data = {}
 
         # Setup service
@@ -78,12 +78,13 @@ class DatasetRecorder:
 
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         self.current_session_dir: Path = self.base_save_dir / f"{timestamp}"
-        self.current_session_dir.mkdir(parents=True, exist_ok=True)
+        self.msgs_dir = self.current_session_dir / "msgs"
+        self.msgs_dir.mkdir(parents=True, exist_ok=True)
 
         self.camera.reset_output_dir(self.current_session_dir)
 
         # Reset manifest data and get attributes
-        self.manifest_data = []
+        self.frame_info = []
         self.attribute_data = {
             "camera": self.camera.get_attributes(),
             "robot": self.robot.get_attributes(),
@@ -107,7 +108,9 @@ class DatasetRecorder:
         self.is_recording = False
 
         # --- Save the manifest file ---
-        manifest_path = self.current_session_dir / "attributes.json"
+        attributes_path = self.current_session_dir / "attributes.json"
+        frame_info_file = "frame_info.json"
+        frame_info_path = self.current_session_dir / frame_info_file
 
         time_now = rospy.Time.now()
         start_time_str = datetime.fromtimestamp(
@@ -132,11 +135,13 @@ class DatasetRecorder:
                 "metadata": final_metadata,
                 "attributes": self.attribute_data,
                 "task_info": {},
-                "frames": self.manifest_data,
+                "frame_info_path": frame_info_file,
             }
-            with open(manifest_path, "w") as f:
+            with open(attributes_path, "w") as f:
                 json.dump(manifest_content, f)
-            rospy.loginfo(f"Manifest saved to {manifest_path}")
+            with open(frame_info_path, "w") as f:
+                json.dump(self.frame_info, f)
+            rospy.loginfo(f"Manifest saved to {attributes_path}")
         except Exception as e:
             rospy.logerr(f"Failed to save manifest file: {e}")
         # ---
@@ -147,7 +152,7 @@ class DatasetRecorder:
         # Reset state
         self.current_session_dir = None
         self.recording_start_time = None
-        self.manifest_data = []
+        self.frame_info = []
 
         return TriggerResponse(
             success=True,
@@ -172,14 +177,20 @@ class DatasetRecorder:
                 "timestamp": current_time.to_sec(),
             }
             try:
-                frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
-                frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
-                frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
-                frame_info["robot_states"] = self.robot.get_robot_state(
-                    msgs, frame_id_str
-                )
+                # frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
+                # frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
+                # frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
+                # frame_info["robot_states"] = self.robot.get_robot_state(
+                #     msgs, frame_id_str
+                # )
+                msgs_path = self.msgs_dir / f"{frame_id_str}.pkl"
+                with open(msgs_path, "wb") as f:
+                    pickle.dump(msgs, f)
 
-                self.manifest_data.append(frame_info)
+                frame_info["messages_path"] = str(
+                    msgs_path.relative_to(self.current_session_dir)
+                )
+                self.frame_info.append(frame_info)
 
                 self.frame_count += 1
                 rospy.loginfo(

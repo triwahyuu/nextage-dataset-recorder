@@ -9,6 +9,8 @@ import rospy
 import sensor_msgs.point_cloud2 as pc2
 import tf2_ros
 import tf2_sensor_msgs
+import message_filters
+
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 from cv_bridge import CvBridge
 
@@ -93,19 +95,25 @@ class KinectRecorder:
 
         img_topic = rospy.get_param("~image_topic", "/rgb/image_raw").lstrip("/")
         self.image_topic_name = f"/{self.node_ns}/{img_topic}"
+        self.img_info_name = f"{self.node_ns}/image"
 
         depth_topic = rospy.get_param("~depth_topic", "/depth/image_raw").lstrip("/")
         self.depth_topic_name = f"/{self.node_ns}/{depth_topic}"
+        self.depth_info_name = f"{self.node_ns}/depth"
 
         depth_reg_topic = rospy.get_param(
             "~depth_reg_topic", "/depth_to_rgb/hw_registered/image_rect"
         ).lstrip("/")
         self.depth_reg_topic_name = f"/{self.node_ns}/{depth_reg_topic}"
+        self.depth_reg_info_name = f"{self.node_ns}/depth_reg"
 
         pc_topic = rospy.get_param("~pointcloud_topic", "/points2").lstrip("/")
         self.pc_topic_name = f"/{self.node_ns}/{pc_topic}"
+        self.pc_info_name = f"{self.node_ns}/pointcloud"
 
         self.tf_name = f"{node_ns}_camera_base"
+        self.depth_tf_name = f"{self.node_ns}_depth_camera_link"
+        self.rgb_tf_name = f"{self.node_ns}_rgb_camera_link"
         self.base_frame = "WAIST"
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
@@ -143,7 +151,25 @@ class KinectRecorder:
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
-        self.image_sub = TopicSubscriber(self.image_topic_name, Image)
+        self.image_sub = message_filters.Subscriber(self.image_topic_name, Image)
+        subscribers.append(self.image_sub)
+        subscriber_info.append({"name": self.img_info_name, "type": Image})
+
+        self.depth_sub = message_filters.Subscriber(self.depth_topic_name, Image)
+        subscribers.append(self.depth_sub)
+        subscriber_info.append({"name": self.depth_info_name, "type": Image})
+
+        # self.depth_reg_sub = message_filters.Subscriber(
+        #     self.depth_reg_topic_name, Image
+        # )
+        # subscribers.append(self.depth_reg_sub)
+        # subscriber_info.append({"name": self.depth_reg_info_name, "type": Image})
+
+        # self.pc_sub = message_filters.Subscriber(self.pc_topic_name, PointCloud2)
+        # subscribers.append(self.pc_sub)
+        # subscriber_info.append({"name": self.pc_info_name, "type": PointCloud2})
+
+        # self.image_sub = TopicSubscriber(self.image_topic_name, Image)
         # self.depth_sub = TopicSubscriber(self.depth_topic_name, Image)
         # self.depth_reg_sub = TopicSubscriber(self.depth_reg_topic_name, Image)
         # self.pc_sub = TopicSubscriber(self.pc_topic_name, PointCloud2)
@@ -176,7 +202,7 @@ class KinectRecorder:
                 "rgb": self.rgb_caminfo,
                 "depth": self.depth_caminfo,
             },
-            "pcd_frame": self.base_frame,
+            "pcd_frame": self.pcd_frameid,
         }
 
     def get_pose_tf(self, tf_name: str, base_frame: str) -> tf2_ros.TransformStamped:
@@ -225,12 +251,9 @@ class KinectRecorder:
     def get_camera_pose(self):
         return {
             "camera2world": self.get_pose_tf_dict(self.tf_name, self.base_frame),
-            "depth2camera": self.get_pose_tf_dict(
-                f"{self.node_ns}_depth_camera_link", self.tf_name
-            ),
-            "rgb2camera": self.get_pose_tf_dict(
-                f"{self.node_ns}_rgb_camera_link", self.tf_name
-            ),
+            "depth2camera": self.get_pose_tf_dict(self.depth_tf_name, self.tf_name),
+            "rgb2camera": self.get_pose_tf_dict(self.rgb_tf_name, self.tf_name),
+            "depth2rgb": self.get_pose_tf_dict(self.depth_tf_name, self.rgb_tf_name),
         }
 
     @staticmethod
@@ -303,7 +326,8 @@ class KinectRecorder:
         filepath = self.image_dir / filename
 
         try:
-            msg: Image = self._get_sub_msg(self.image_sub)
+            # msg: Image = self._get_sub_msg(self.image_sub)
+            msg: Image = msgs[self.msg_idx_map[self.img_info_name]]
             if msg is None:
                 return None
 
@@ -323,18 +347,20 @@ class KinectRecorder:
         filepath_reg = self.depth_dir / filename_reg
 
         try:
-            msg: Image = self._get_sub_msg(self.depth_sub)
+            # msg: Image = self._get_sub_msg(self.depth_sub)
+            msg: Image = msgs[self.msg_idx_map[self.depth_info_name]]
             if msg is None:
                 return None
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             cv2.imwrite(str(filepath), cv_image)
 
-            msg: Image = self._get_sub_msg(self.depth_reg_sub)
-            if msg is None:
-                return None
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-            cv2.imwrite(str(filepath_reg), cv_image)
-            return str(filepath_reg.relative_to(self.base_dir))
+            # # msg: Image = self._get_sub_msg(self.depth_reg_sub)
+            # msg: Image = msgs[self.msg_idx_map[self.depth_reg_info_name]]
+            # if msg is None:
+            #     return None
+            # cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            # cv2.imwrite(str(filepath_reg), cv_image)
+            return str(filepath.relative_to(self.base_dir))
         except Exception as e:
             rospy.logerr(f"Failed to save depth frame {frame_id}: {e}")
             raise
@@ -345,7 +371,8 @@ class KinectRecorder:
         filepath = self.pc_dir / filename
 
         try:
-            msg: PointCloud2 = self._get_sub_msg(self.pc_sub)
+            # msg: PointCloud2 = self._get_sub_msg(self.pc_sub)
+            msg: PointCloud2 = msgs[self.msg_idx_map[self.pc_info_name]]
             if msg is None:
                 return None
 
