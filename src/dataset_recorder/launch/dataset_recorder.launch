@@ -6,12 +6,14 @@
   <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
   <arg name="color_resolution" default="1080P"/>        <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
 
+  <!-- 
   <include file="$(find dataset_recorder)/launch/dual_kinect_camera.launch">
     <arg name="kinect_left_sn" value="$(arg kinect_left_sn)"/>
     <arg name="kinect_right_sn" value="$(arg kinect_right_sn)"/>
     <arg name="fps" value="$(arg fps)"/>
     <arg name="color_resolution" value="$(arg color_resolution)"/>
   </include>
+  -->
 
   <!-- camera pose tf -->
   <include file="$(find dataset_recorder)/launch/camera_base_pose.launch"/>
