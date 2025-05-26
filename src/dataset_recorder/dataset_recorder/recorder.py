@@ -24,7 +24,7 @@ class DatasetRecorder:
         self.sync_rate: float = rospy.get_param("~sync_rate", 10.0)
         self.sync_period = rospy.Duration(1.0 / self.sync_rate)
         self.queue_size = rospy.get_param("~queue_size", 10)
-        self.slop = rospy.get_param("~slop", 1)
+        self.slop = rospy.get_param("~slop", 0.1)
 
         # Initialize variables
         self.is_recording: bool = False
@@ -43,21 +43,17 @@ class DatasetRecorder:
 
         # --- Setup Subscribers ---
         self.subscribers = []
-        self.subscriber_info = (
-            []
-        )  # Keep track of topic name and type for callback mapping
+        self.subscriber_info = []
 
-        self.camera = DualKinectRecorder(
-            self.base_save_dir, rate=self.sync_rate, slop=self.slop
-        )
+        self.camera = DualKinectRecorder(self.base_save_dir)
         self.robot = RobotStateRecorder()
 
         # --- Setup Synchronizer ---
-        # self.camera.setup(self.subscribers, self.subscriber_info)
+        self.camera.setup(self.subscribers, self.subscriber_info)
         self.robot.setup(self.subscribers, self.subscriber_info)
 
         self.msg_idx_map = map_subinfo_to_idx(self.subscriber_info)
-        # self.camera.set_msg_idx_map(self.msg_idx_map)
+        self.camera.set_msg_idx_map(self.msg_idx_map)
         self.robot.set_msg_idx_map(self.msg_idx_map)
 
         self.ts = message_filters.ApproximateTimeSynchronizer(
@@ -162,44 +158,40 @@ class DatasetRecorder:
 
     def sync_callback(self, *msgs) -> None:
         """Callback for synchronized messages"""
-        # rospy.loginfo(f"{self.is_recording}  {rospy.Time.now().to_sec()}  {self.last_sync_time.to_sec()}")
         if not self.is_recording:
             return
 
-        current_time = rospy.Time.now()  # Use a consistent time for check
+        current_time = rospy.Time.now()
         interval = current_time - self.last_sync_time
-        # rospy.loginfo(f"{interval.to_sec()}  {self.sync_period.to_sec()}")
-        if interval >= self.sync_period:
-            self.last_sync_time = current_time
+        # if interval < self.sync_period:
+        #     return
 
-            frame_id_str = f"{self.frame_count:06d}"  # e.g., 000000, 000001
-            frame_info = {
-                "frame_id": frame_id_str,
-                "timestamp": current_time.to_sec(),
-            }
-            try:
-                # frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
-                # frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
-                # frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
-                frame_info["robot_states"] = self.robot.get_robot_state(
-                    msgs, frame_id_str
-                )
-                msgs_path = self.msgs_dir / f"{frame_id_str}.pkl"
-                with open(msgs_path, "wb") as f:
-                    pickle.dump(msgs, f)
+        self.last_sync_time = current_time
 
-                frame_info["messages_path"] = str(
-                    msgs_path.relative_to(self.current_session_dir)
-                )
-                self.frame_info.append(frame_info)
+        frame_id_str = f"{self.frame_count:06d}"  # e.g., 000000, 000001
+        frame_info = {
+            "frame_id": frame_id_str,
+            "timestamp": current_time.to_sec(),
+        }
+        try:
+            # frame_info["rgb_path"] = self.camera.save_image(msgs, frame_id_str)
+            # frame_info["depth_path"] = self.camera.save_depth(msgs, frame_id_str)
+            # frame_info["pcd_path"] = self.camera.save_pointcloud(msgs, frame_id_str)
+            frame_info["robot_states"] = self.robot.get_robot_state(msgs, frame_id_str)
+            msgs_path = self.msgs_dir / f"{frame_id_str}.pkl"
+            with open(msgs_path, "wb") as f:
+                pickle.dump(msgs, f)
 
-                self.frame_count += 1
-                rospy.loginfo(
-                    f"Recorded frame {self.frame_count}  {(rospy.Time.now() - current_time).to_sec()}"
-                )
+            frame_info["messages_path"] = str(
+                msgs_path.relative_to(self.current_session_dir)
+            )
+            self.frame_info.append(frame_info)
 
-            except Exception as e:
-                rospy.logerr(
-                    f"Error saving data for frame {self.frame_count}: {e}",
-                    exc_info=True,
-                )
+            self.frame_count += 1
+            rospy.loginfo(f"Recorded frame {self.frame_count}  {interval.to_sec()}")
+
+        except Exception as e:
+            rospy.logerr(
+                f"Error saving data for frame {self.frame_count}: {e}",
+                exc_info=True,
+            )

@@ -32,7 +32,7 @@ class TopicSubscriber:
 
         try:
             self.subscriber = rospy.Subscriber(
-                self.topic_name, self.message_type, self._callback
+                self.topic_name, self.message_type, self._callback, queue_size=10
             )
             rospy.loginfo(f"Subscribed to topic: {self.topic_name}")
 
@@ -145,9 +145,9 @@ class KinectRecorder:
         self.image_dir = self.output_dir / "rgb"
         self.depth_dir = self.output_dir / "depth"
         self.pc_dir = self.output_dir / "point_cloud"
-        self.image_dir.mkdir(parents=True, exist_ok=True)
-        self.depth_dir.mkdir(parents=True, exist_ok=True)
-        self.pc_dir.mkdir(parents=True, exist_ok=True)
+        # self.image_dir.mkdir(parents=True, exist_ok=True)
+        # self.depth_dir.mkdir(parents=True, exist_ok=True)
+        # self.pc_dir.mkdir(parents=True, exist_ok=True)
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
