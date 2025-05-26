@@ -15,6 +15,7 @@
       <arg name="rgb_point_cloud" value="true"/>
       <arg name="fps" value="$(arg fps)"/>
       <arg name="color_resolution" value="$(arg color_resolution)"/>
+      <arg name="num_worker_threads" value="8"/>
     </include>
   </group>
 
@@ -27,6 +28,7 @@
       <arg name="rgb_point_cloud" value="true"/>
       <arg name="fps" value="$(arg fps)"/>
       <arg name="color_resolution" value="$(arg color_resolution)"/>
+      <arg name="num_worker_threads" value="8"/>
     </include>
   </group>
 
