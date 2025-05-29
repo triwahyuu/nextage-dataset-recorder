@@ -137,17 +137,15 @@ class KinectRecorder:
         self.depth_caminfo = None
 
         self.base_dir = Path(output_dir)
+        self.clip_dir = None
 
-    def reset_output_dir(self, output_dir):
-        self.base_dir = Path(output_dir)
-        self.output_dir = self.base_dir.joinpath(self.node_ns).resolve()
+    def set_clip_name(self, clip_name: str):
+        self.clip_dir = self.base_dir / clip_name
+        self.output_dir = self.clip_dir.joinpath(self.node_ns).resolve()
 
         self.image_dir = self.output_dir / "rgb"
         self.depth_dir = self.output_dir / "depth"
         self.pc_dir = self.output_dir / "point_cloud"
-        # self.image_dir.mkdir(parents=True, exist_ok=True)
-        # self.depth_dir.mkdir(parents=True, exist_ok=True)
-        # self.pc_dir.mkdir(parents=True, exist_ok=True)
 
     def setup(self, subscribers: list, subscriber_info: list):
         """Sets up the ROS subscribers."""
@@ -290,40 +288,11 @@ class KinectRecorder:
             )
         return msg
 
-    def _save_img_msg(self, msg: Image, filepath: Path):
-        raw_data_filename = filepath.with_suffix(".bin")
-        metadata_filename = filepath.with_suffix(".json")
-
-        # Save raw pixel data
-        with open(raw_data_filename, "wb") as f_raw:
-            f_raw.write(msg.data)
-
-        metadata = {
-            "header": {
-                "seq": msg.header.seq,
-                "stamp": {
-                    "secs": msg.header.stamp.secs,
-                    "nsecs": msg.header.stamp.nsecs,
-                },
-                "frame_id": msg.header.frame_id,
-            },
-            "height": msg.height,
-            "width": msg.width,
-            "encoding": msg.encoding,
-            "is_bigendian": msg.is_bigendian,
-            "step": msg.step,  # Full row length in bytes
-            "data_length": len(msg.data),  # For verification, should be height * step
-        }
-
-        # 3. Save metadata to a JSON file
-        with open(metadata_filename, "w") as f_meta:
-            json.dump(metadata, f_meta, indent=4)
-        return raw_data_filename
-
     def save_image(self, msgs: list, frame_id: str) -> str:
         """Save image message to disk as PNG"""
         filename = f"{frame_id}.png"
         filepath = self.image_dir / filename
+        self.image_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             # msg: Image = self._get_sub_msg(self.image_sub)
@@ -345,6 +314,7 @@ class KinectRecorder:
         filepath = self.depth_dir / filename
         filename_reg = f"{frame_id}_aligned.png"
         filepath_reg = self.depth_dir / filename_reg
+        self.depth_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             # msg: Image = self._get_sub_msg(self.depth_sub)
@@ -369,6 +339,7 @@ class KinectRecorder:
         """Save pointcloud message to disk as NPY (XYZRGB)"""
         filename = f"{frame_id}.npy"
         filepath = self.pc_dir / filename
+        self.pc_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             # msg: PointCloud2 = self._get_sub_msg(self.pc_sub)
@@ -394,14 +365,16 @@ class KinectRecorder:
 class DualKinectRecorder:
     def __init__(self, output_dir, rate=10, slop=0.1):
         self.base_dir = Path(output_dir)
+        self.clip_dir = None
 
         self.left_recorder = KinectRecorder(output_dir, "kinect_left", rate, slop)
         self.right_recorder = KinectRecorder(output_dir, "kinect_right", rate, slop)
 
-    def reset_output_dir(self, output_dir):
-        self.base_dir = Path(output_dir)
-        self.left_recorder.reset_output_dir(output_dir)
-        self.right_recorder.reset_output_dir(output_dir)
+    def set_clip_name(self, clip_name: str):
+        self.clip_dir = self.base_dir / clip_name
+        self.clip_dir.mkdir(parents=True, exist_ok=True)
+        self.left_recorder.set_clip_name(clip_name)
+        self.right_recorder.set_clip_name(clip_name)
 
     def setup(self, subscribers: list, subscriber_info: list):
         self.left_recorder.setup(subscribers, subscriber_info)

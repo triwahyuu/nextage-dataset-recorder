@@ -29,7 +29,7 @@ class DatasetRecorder:
         # Initialize variables
         self.is_recording: bool = False
         self.recording_start_time: rospy.Time = None
-        self.current_session_dir: Path = None
+        self.clip_dir: Path = None
         self.frame_count: int = 0
         self.last_sync_time = rospy.Time(0)
         self.frame_info = []
@@ -72,12 +72,13 @@ class DatasetRecorder:
         if self.is_recording:
             return TriggerResponse(success=False, message="Already recording")
 
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        self.current_session_dir: Path = self.base_save_dir / f"{timestamp}"
-        self.msgs_dir = self.current_session_dir / "msgs"
+        timestamp = rospy.Time.now().to_nsec() // 1000  # microseconds
+        timestamp_str = f"{timestamp}"
+        self.clip_dir: Path = self.base_save_dir / timestamp_str
+        self.msgs_dir = self.clip_dir / "msgs"
         self.msgs_dir.mkdir(parents=True, exist_ok=True)
 
-        self.camera.reset_output_dir(self.current_session_dir)
+        self.camera.set_clip_name(timestamp_str)
 
         # Reset manifest data and get attributes
         self.frame_info = []
@@ -92,9 +93,9 @@ class DatasetRecorder:
         self.frame_count = 0
         self.last_sync_time = rospy.Time(0)  # Reset last sync time
 
-        rospy.loginfo(f"Started recording to {self.current_session_dir}")
+        rospy.loginfo(f"Started recording to {self.clip_dir}")
         return TriggerResponse(
-            success=True, message=f"Started recording to {self.current_session_dir}"
+            success=True, message=f"Started recording to {self.clip_dir}"
         )
 
     def handle_stop_recording(self, req: TriggerRequest) -> TriggerResponse:
@@ -105,9 +106,9 @@ class DatasetRecorder:
         self.is_recording = False
 
         # --- Save the manifest file ---
-        attributes_path = self.current_session_dir / "attributes.json"
+        attributes_path = self.clip_dir / "attributes.json"
         frame_info_file = "frame_info.json"
-        frame_info_path = self.current_session_dir / frame_info_file
+        frame_info_path = self.clip_dir / frame_info_file
 
         time_now = rospy.Time.now()
         start_time_str = datetime.fromtimestamp(
@@ -128,14 +129,14 @@ class DatasetRecorder:
                 "start_time": start_time_str,
                 "end_time": end_time_str,
             }
-            manifest_content = {
+            attributes_data = {
                 "metadata": final_metadata,
                 "attributes": self.attribute_data,
                 "task_info": {},
                 "frame_info_path": frame_info_file,
             }
             with open(attributes_path, "w") as f:
-                json.dump(manifest_content, f)
+                json.dump(attributes_data, f)
             with open(frame_info_path, "w") as f:
                 json.dump(self.frame_info, f)
             rospy.loginfo(f"Manifest saved to {attributes_path}")
@@ -147,7 +148,7 @@ class DatasetRecorder:
             f"Stopped recording. Recorded {self.frame_count} frames over {duration_sec:.2f} seconds."
         )
         # Reset state
-        self.current_session_dir = None
+        self.clip_dir = None
         self.recording_start_time = None
         self.frame_info = []
 
@@ -182,9 +183,7 @@ class DatasetRecorder:
             with open(msgs_path, "wb") as f:
                 pickle.dump(msgs, f)
 
-            frame_info["messages_path"] = str(
-                msgs_path.relative_to(self.current_session_dir)
-            )
+            frame_info["messages_path"] = str(msgs_path.relative_to(self.clip_dir))
             self.frame_info.append(frame_info)
 
             self.frame_count += 1
