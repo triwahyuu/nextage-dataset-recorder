@@ -1,4 +1,3 @@
-import time
 import json
 import pickle
 import rospy
@@ -27,10 +26,9 @@ class DatasetRecorder:
         self.slop = rospy.get_param("~slop", 0.1)
 
         # task info
-        self.task_config_path = rospy.get_param(
-            "~task_config_path",
-            "/workspaces/dataset_recorder/src/dataset_recorder/task_configs/set0_target0.json",
-        )
+        self.task_config_path = rospy.get_param("~task_config_path", None)
+        if self.task_config_path is None:
+            raise RuntimeError("Task config path () is not set")
         with open(self.task_config_path, "r") as f:
             self.task_info = json.load(f)
             assert "target_object" in self.task_info
@@ -40,6 +38,7 @@ class DatasetRecorder:
         self.is_recording: bool = False
         self.recording_start_time: rospy.Time = None
         self.clip_dir: Path = None
+        self.clip_name: str = None
         self.frame_count: int = 0
         self.last_sync_time = rospy.Time(0)
         self.frame_info = []
@@ -83,12 +82,12 @@ class DatasetRecorder:
             return TriggerResponse(success=False, message="Already recording")
 
         timestamp = rospy.Time.now().to_nsec() // 1000  # microseconds
-        timestamp_str = f"{timestamp}"
-        self.clip_dir: Path = self.base_save_dir / timestamp_str
+        self.clip_name = f"{timestamp}"
+        self.clip_dir: Path = self.base_save_dir / self.clip_name
         self.msgs_dir = self.clip_dir / "msgs"
         self.msgs_dir.mkdir(parents=True, exist_ok=True)
 
-        self.camera.set_clip_name(timestamp_str)
+        self.camera.set_clip_name(self.clip_name)
 
         # Reset manifest data and get attributes
         self.frame_info = []

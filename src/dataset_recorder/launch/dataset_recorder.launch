@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch>
 
+  <arg name="task_config_path" default="$(find dataset_recorder)/task_configs/set0_target0.json"/>
   <arg name="kinect_left_sn" default="000153513712"/>
   <arg name="kinect_right_sn" default="000231113712"/>
   <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
@@ -24,5 +25,6 @@
     <param name="image_topic" value="/rgb/image_raw" />
     <param name="pointcloud_topic" value="/points2" />
     <param name="robot_state_topic" value="/joint_states" />
+    <param name="task_config_path" value="$(arg task_config_path)" />
   </node>
 </launch>
