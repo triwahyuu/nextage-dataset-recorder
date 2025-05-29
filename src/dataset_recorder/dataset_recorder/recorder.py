@@ -26,6 +26,16 @@ class DatasetRecorder:
         self.queue_size = rospy.get_param("~queue_size", 10)
         self.slop = rospy.get_param("~slop", 0.1)
 
+        # task info
+        self.task_config_path = rospy.get_param(
+            "~task_config_path",
+            "/workspaces/dataset_recorder/src/dataset_recorder/task_configs/set0_target0.json",
+        )
+        with open(self.task_config_path, "r") as f:
+            self.task_info = json.load(f)
+            assert "target_object" in self.task_info
+            assert "available_objects" in self.task_info
+
         # Initialize variables
         self.is_recording: bool = False
         self.recording_start_time: rospy.Time = None
@@ -132,7 +142,7 @@ class DatasetRecorder:
             attributes_data = {
                 "metadata": final_metadata,
                 "attributes": self.attribute_data,
-                "task_info": {},
+                "task_info": self.task_info,
                 "frame_info_path": frame_info_file,
             }
             with open(attributes_path, "w") as f:
