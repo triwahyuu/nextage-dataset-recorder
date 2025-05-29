@@ -139,6 +139,7 @@ class DatasetRecorder:
                 "end_time": end_time_str,
             }
             attributes_data = {
+                "clip_id": self.clip_name,
                 "metadata": final_metadata,
                 "attributes": self.attribute_data,
                 "task_info": self.task_info,
