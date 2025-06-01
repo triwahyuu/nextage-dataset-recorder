@@ -252,6 +252,7 @@ class KinectRecorder:
             "depth2camera": self.get_pose_tf_dict(self.depth_tf_name, self.tf_name),
             "rgb2camera": self.get_pose_tf_dict(self.rgb_tf_name, self.tf_name),
             "depth2rgb": self.get_pose_tf_dict(self.depth_tf_name, self.rgb_tf_name),
+            "rgb2world": self.get_pose_tf_dict(self.rgb_tf_name, self.base_frame),
         }
 
     @staticmethod
