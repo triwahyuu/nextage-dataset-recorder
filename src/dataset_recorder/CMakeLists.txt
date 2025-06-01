@@ -165,6 +165,7 @@ include_directories(
 catkin_install_python(PROGRAMS
   nodes/dataset_recorder_node.py
   nodes/camera_recorder_node.py
+  nodes/visualize_pointcloud.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
