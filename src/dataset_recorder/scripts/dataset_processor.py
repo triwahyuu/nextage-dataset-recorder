@@ -56,6 +56,21 @@ class DatasetClipProcessor:
         """
         self.clip_dir = Path(clip_dir).resolve()
 
+        # Logger setup
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+        )
+        self.logger = logging.getLogger(__name__)
+
+        # Initialize device
+        if use_gpu and torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        self.is_using_gpu = self.device == torch.device("cuda")
+        self.logger.info(f"Using device: {self.device}")
+
         self.attributes = self._load_attributes(self.clip_dir)
         self.frame_info = self._load_frame_info(self.clip_dir)
         self.depth_scale = depth_scale
@@ -72,28 +87,13 @@ class DatasetClipProcessor:
         self.depth_dir = self.clip_dir / "depth"
         self.pcd_dir = self.clip_dir / "point_cloud"
 
-        # Initialize PyTorch device
-        if use_gpu and torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-        self.is_using_gpu = self.device == torch.device("cuda")
-        self.logger.info(f"Using device: {self.device}")
-
-        # Logger setup
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-        )
-        self.logger = logging.getLogger(__name__)
-
         self.logger.info(f"Processing clip {self.clip_dir}")
 
     def _get_camera_info(self, attrs: dict, which_cam: str):
         rgb_cam = self._load_camera_info(attrs, which_cam, "rgb")
         depth_cam = self._load_camera_info(attrs, which_cam, "depth")
         depth2rgb = self._get_depth2rgb(attrs, which_cam)
-        rgb2world = self._calculate_rgb2world(attrs, which_cam)
+        rgb2world = self._get_rgb2world(attrs, which_cam)
 
         caminfo = CameraInfo(
             rgb_cam=rgb_cam,
@@ -180,30 +180,30 @@ class DatasetClipProcessor:
         rgb_imgsz = cam_info.rgb_cam.image_size
         d_img_size = cam_info.depth_cam.image_size
 
+        rgb_k = cam_info.rgb_cam.K
+        rgb_d = cam_info.rgb_cam.D
+        depth_k = cam_info.depth_cam.K
+        depth_d = cam_info.depth_cam.D
+        if self.is_using_gpu:
+            rgb_k = rgb_k.cpu().numpy()
+            rgb_d = rgb_d.cpu().numpy()
+            depth_k = depth_k.cpu().numpy()
+            depth_d = depth_d.cpu().numpy()
+
         # Compute optimal camera matrix for undistortion
         rgb_K_new, _ = cv2.getOptimalNewCameraMatrix(
-            cam_info.rgb_cam.K, cam_info.rgb_cam.D, rgb_imgsz, 1, rgb_imgsz
+            rgb_k, rgb_d, rgb_imgsz, 1, rgb_imgsz
         )
         depth_K_new, _ = cv2.getOptimalNewCameraMatrix(
-            cam_info.depth_cam.K, cam_info.depth_cam.D, d_img_size, 1, rgb_imgsz
+            depth_k, depth_d, d_img_size, 1, rgb_imgsz
         )
 
         # Pre-compute rectification maps
         cam_info.rgb_map1, cam_info.rgb_map2 = cv2.initUndistortRectifyMap(
-            cam_info.rgb_cam.K,
-            cam_info.rgb_cam.D,
-            None,
-            rgb_K_new,
-            rgb_imgsz,
-            cv2.CV_16SC2,
+            rgb_k, rgb_d, None, rgb_K_new, rgb_imgsz, cv2.CV_16SC2
         )
         cam_info.depth_map1, cam_info.depth_map2 = cv2.initUndistortRectifyMap(
-            cam_info.depth_cam.K,
-            cam_info.depth_cam.D,
-            None,
-            depth_K_new,
-            rgb_imgsz,
-            cv2.CV_16SC2,
+            depth_k, depth_d, None, depth_K_new, rgb_imgsz, cv2.CV_16SC2
         )
 
         # Update camera matrices
@@ -283,7 +283,9 @@ class DatasetClipProcessor:
         z_valid = z_flat[valid_depth_mask]
 
         if z_valid.size == 0:
-            self.logger.warning("No valid depth points found after initial filtering.")
+            self.logger.warning(
+                f"[{frame_id}_{which_cam}] No valid depth points found after initial filtering."
+            )
             return
 
         # 5. Unproject valid depth pixels to 3D points in the depth camera's coordinate frame
@@ -310,7 +312,7 @@ class DatasetClipProcessor:
 
         if pts_rgb_front.shape[1] == 0:
             self.logger.warning(
-                "No points in front of RGB camera after transformation."
+                f"[{frame_id}_{which_cam}] No points in front of RGB camera after transformation."
             )
             return
         self.logger.debug(
@@ -346,7 +348,8 @@ class DatasetClipProcessor:
         # Check if any points remain after all filtering
         if pts_final.shape[1] == 0:
             self.logger.warning(
-                "No points projected within RGB image bounds after rounding and final filtering."
+                f"[{frame_id}_{which_cam}] No points projected within RGB image bounds "
+                "after rounding and final filtering."
             )
             return
         self.logger.debug(f"{pts_final.shape[1]} points remaining.")
@@ -369,7 +372,7 @@ class DatasetClipProcessor:
         point_cloud = np.hstack((pts_final.T, colors_rgb))  # Shape: (N, 6)
         if point_cloud.shape[0] < rgb_height * rgb_width * 0.04:
             self.logger.warning(
-                "Generated point cloud is too small with {point_cloud.shape[0]} points"
+                f"[{frame_id}_{which_cam}] Generated point cloud is too small with {point_cloud.shape[0]} points"
             )
 
         return self._save_depthreg_pcd(point_cloud, reg_depth, which_cam, frame_id)
@@ -483,7 +486,7 @@ class DatasetClipProcessor:
 
         # 10. Get colors for these final points from the RGB image
         colors_bgr = rgb_rect[v_img_idx, u_img_idx]  # (N_final, 3)
-        colors_rgb = colors_bgr[:, ::-1]  # Convert BGR to RGB
+        colors_rgb = colors_bgr[:, [2, 1, 0]]  # Convert BGR to RGB
 
         # 11. Transform points to world frame
         # pts_final_homogen shape: (4, N_final)
@@ -508,9 +511,7 @@ class DatasetClipProcessor:
         point_cloud = torch.cat((pts_final_world.T, colors_rgb.float()), dim=1)
         point_cloud_np: np.ndarray = point_cloud.cpu().numpy()
 
-        if (
-            point_cloud_np.shape[0] < rgb_height * rgb_width * 0.04
-        ):  # Adjusted threshold
+        if point_cloud_np.shape[0] < rgb_height * rgb_width * 0.04:
             self.logger.warning(
                 f"[{frame_id}_{which_cam}] Generated point cloud is small: {point_cloud_np.shape[0]} points."
             )
@@ -551,6 +552,16 @@ class DatasetClipProcessor:
 
         return rgb_img, depth_img
 
+    def process_frame(self, msgs: dict, frame_id: str):
+        self.logger.debug(f"Processing frame {frame_id}")
+        if self.is_using_gpu:
+            outpath_left = self.process_image_pair_pytorch(msgs, "left", frame_id)
+            outpath_right = self.process_image_pair_pytorch(msgs, "right", frame_id)
+        else:
+            outpath_left = self.process_image_pair(msgs, "left", frame_id)
+            outpath_right = self.process_image_pair(msgs, "right", frame_id)
+        return {"left": outpath_left, "right": outpath_right}
+
     def run(self) -> list:
         """
         Run processing on RGB-Depth image pairs for the clip.
@@ -560,14 +571,12 @@ class DatasetClipProcessor:
         total_start_time = time.time()
 
         for info in tqdm(self.frame_info):
-            self.logger.debug(f"Processing frame {info['frame_id']}")
             msg_path = self.clip_dir / f"{info['messages_path']}"
             with open(msg_path, "rb") as f:
                 msgs = pickle.load(f)
 
-            outpath_left = self.process_image_pair(msgs, "left", info["frame_id"])
-            outpath_right = self.process_image_pair(msgs, "right", info["frame_id"])
-            output_files.append({"left": outpath_left, "right": outpath_right})
+            outpath = self.process_frame(msgs, info["frame_id"])
+            output_files.append(outpath)
 
         total_time = time.time() - total_start_time
         self.logger.info(
@@ -590,7 +599,7 @@ class DatasetProcessor:
 
     def run(self):
         for clip_dir in self.clip_dirs:
-            processor = DatasetClipProcessor(clip_dir, self.depth_scale)
+            processor = DatasetClipProcessor(clip_dir, self.depth_scale, use_gpu=True)
             processor.run()
 
 
