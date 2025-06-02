@@ -111,18 +111,17 @@ class PointCloudPublisher:
         y_optical = points[:, 1].astype(np.float32)
         z_optical = points[:, 2].astype(np.float32)
 
-        # Transform to a standard Z-up frame (X-forward, Y-left, Z-up)
-        # New X = Optical Z
-        # New Y = -Optical X
-        # New Z = -Optical Y
         # Create structured array - vectorized assignment
         cloud_array = np.empty(n_points, dtype=point_dtype)
-        cloud_array["x"] = z_optical
-        cloud_array["y"] = -x_optical
-        cloud_array["z"] = -y_optical
-        # cloud_array["x"] = x_optical
-        # cloud_array["y"] = y_optical
-        # cloud_array["z"] = z_optical
+        if self.frame_id == "WAIST":
+            cloud_array["x"] = x_optical
+            cloud_array["y"] = y_optical
+            cloud_array["z"] = z_optical
+        else:
+            # Transform to a standard Z-up frame (X-forward, Y-left, Z-up)
+            cloud_array["x"] = z_optical  # New X = Optical Z
+            cloud_array["y"] = -x_optical  # New Y = -Optical X
+            cloud_array["z"] = -y_optical  # New Z = -Optical Y
         cloud_array["rgb"] = packed_rgb
 
         # Convert to bytes - much faster than individual struct packing

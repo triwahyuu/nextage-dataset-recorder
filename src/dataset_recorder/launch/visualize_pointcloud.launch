@@ -1,12 +1,13 @@
 <launch>
     <arg name="pointcloud_file" default="$(find dataset_recorder)/data/pointcloud.npy"/>
+    <arg name="frame_id" default="WAIST"/>
 
     <include file="$(find dataset_recorder)/launch/camera_base_pose.launch"/>
 
     <!-- Point Cloud Publisher Node -->
     <node name="pointcloud_publisher" pkg="dataset_recorder" type="visualize_pointcloud.py" output="screen">
         <param name="pointcloud_file" value="$(arg pointcloud_file)" />
-        <param name="frame_id" value="kinect_left_camera_base" />
+        <param name="frame_id" value="$(arg frame_id)" />
         <param name="republish_rate" value="1" />
     </node>
     

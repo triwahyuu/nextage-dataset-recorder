@@ -333,12 +333,12 @@ class DatasetClipProcessor:
         colors_bgr = rgb_rect[v_img_idx, u_img_idx]  # (N_final, 3)
         colors_rgb = colors_bgr[:, ::-1]  # Convert BGR to RGB
 
-        # # 11. Transform points to world frame
-        # # Convert points to homogeneous coordinates (4, N_final)
-        # pts_final_homogen = np.vstack((pts_final, np.ones((1, pts_final.shape[1]))))
-        # # Apply transformation
-        # pts_world_homogen = cam_info.rgb2world @ pts_final_homogen
-        # pts_final = pts_world_homogen[:3, :]
+        # 11. Transform points to world frame
+        # Convert points to homogeneous coordinates (4, N_final)
+        pts_final_homogen = np.vstack((pts_final, np.ones((1, pts_final.shape[1]))))
+        # Apply transformation
+        pts_world_homogen = cam_info.rgb2world @ pts_final_homogen
+        pts_final = pts_world_homogen[:3, :]
 
         # 12. Create and save the registered depth image
         reg_depth_m = np.zeros((rgb_height, rgb_width), dtype=np.float32)

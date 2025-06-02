@@ -9,3 +9,6 @@ From the robot point of view.
 Device serial number:
 - Right: 000231113712
 - Left: 000153513712
+
+## NOTES
+- Generated point cloud from [dataset_processor.py](src/dataset_recorder/scripts/dataset_processor.py) script is in world (WAIST) coordinate.
