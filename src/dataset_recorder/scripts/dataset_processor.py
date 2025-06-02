@@ -578,11 +578,13 @@ class DatasetClipProcessor:
             outpath = self.process_frame(msgs, info["frame_id"])
             output_files.append(outpath)
 
-        total_time = time.time() - total_start_time
-        self.logger.info(
-            f"Processed {len(output_files)} image pairs in {total_time:.2f}s"
+        total_time = (time.time() - total_start_time) * 1000
+        self.logger.debug(
+            f"Processed {len(output_files)} image pairs in {total_time/1000:.2f}s"
         )
-        self.logger.info(f"Average time per pair: {total_time/len(output_files):.2f}s")
+        self.logger.debug(
+            f"Average time per pair: {total_time/len(output_files):.2f} ms"
+        )
 
         return output_files
 
