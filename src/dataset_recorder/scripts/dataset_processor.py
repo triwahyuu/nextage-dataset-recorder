@@ -4,6 +4,7 @@ import time
 import json
 import logging
 import pickle
+import torch
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,18 +43,16 @@ class DatasetClipProcessor:
     Handles image rectification, depth registration, and point cloud generation.
     """
 
-    def __init__(self, clip_dir: Path, depth_scale: float = 1000.0):
+    def __init__(
+        self, clip_dir: Path, depth_scale: float = 1000.0, use_gpu: bool = True
+    ):
         """
-        Initialize the pipeline with camera parameters.
+        Initialize the pipeline.
 
         Args:
-            clip_dir (Path): clip directory
-            rgb_camera_matrix: 3x3 RGB camera intrinsic matrix
-            rgb_dist_coeffs: RGB camera distortion coefficients
-            depth_camera_matrix: 3x3 Depth camera intrinsic matrix
-            depth_dist_coeffs: Depth camera distortion coefficients
-            depth_to_rgb_transform: 4x4 transformation matrix from depth to RGB frame
-            depth_scale: Scale factor to convert depth values to meters (default: 1000.0 for mm to m)
+            clip_dir (Path): clip directory.
+            depth_scale (float): Scale factor to convert depth values to meters.
+            use_gpu (bool): Whether to use GPU if available.
         """
         self.clip_dir = Path(clip_dir).resolve()
 
@@ -72,6 +71,14 @@ class DatasetClipProcessor:
         self.rgb_dir = self.clip_dir / "rgb"
         self.depth_dir = self.clip_dir / "depth"
         self.pcd_dir = self.clip_dir / "point_cloud"
+
+        # Initialize PyTorch device
+        if use_gpu and torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        self.is_using_gpu = self.device == torch.device("cuda")
+        self.logger.info(f"Using device: {self.device}")
 
         # Logger setup
         logging.basicConfig(
@@ -115,14 +122,10 @@ class DatasetClipProcessor:
 
         K = np.array(cam_attr["K"]).reshape(3, 3)
         D = np.array(cam_attr["D"])
+        if self.is_using_gpu:
+            K = torch.from_numpy(K).to(self.device)
+            D = torch.from_numpy(D).to(self.device)
         return CameraParameters(K, D, (cam_attr["width"], cam_attr["height"]))
-
-    def _get_depth2rgb(self, attrs: dict, which_cam: str):
-        cam_pose = attrs["attributes"]["camera"][which_cam]["cam_pose"]
-        if "depth2rgb" not in cam_pose:
-            return self._calculate_depth2rgb(attrs, which_cam)
-
-        return self._get_tf_mat(attrs, which_cam, "depth2rgb")
 
     def _get_tf_mat(self, attrs: dict, which_cam: str, tf_name: str):
         cam_pose = attrs["attributes"]["camera"][which_cam]["cam_pose"]
@@ -134,16 +137,35 @@ class DatasetClipProcessor:
         trans = cam_pose[tf_name]["translation"]
         trans_np = np.array([trans["x"], trans["y"], trans["z"]])
 
-        tf_mat = np.eye(4)
+        tf_mat = np.eye(4, dtype=np.float32)
         tf_mat[:3, :3] = Rotation.from_quat(rot_np).as_matrix()
         tf_mat[:3, 3] = np.array(trans_np)
+        if self.is_using_gpu:
+            tf_mat = torch.from_numpy(tf_mat).to(self.device)
         return tf_mat
+
+    def _get_depth2rgb(self, attrs: dict, which_cam: str):
+        cam_pose = attrs["attributes"]["camera"][which_cam]["cam_pose"]
+        if "depth2rgb" not in cam_pose:
+            return self._calculate_depth2rgb(attrs, which_cam)
+
+        return self._get_tf_mat(attrs, which_cam, "depth2rgb")
+
+    def _get_rgb2world(self, attrs: dict, which_cam: str):
+        cam_pose = attrs["attributes"]["camera"][which_cam]["cam_pose"]
+        if "rgb2world" not in cam_pose:
+            return self._calculate_rgb2world(attrs, which_cam)
+
+        return self._get_tf_mat(attrs, which_cam, "rgb2world")
 
     def _calculate_depth2rgb(self, attrs: dict, which_cam: str):
         depth2cam = self._get_tf_mat(attrs, which_cam, "depth2camera")
         rgb2cam = self._get_tf_mat(attrs, which_cam, "rgb2camera")
 
-        depth2rgb = np.linalg.inv(rgb2cam) @ depth2cam
+        if self.is_using_gpu:
+            depth2rgb = torch.linalg.inv(rgb2cam) @ depth2cam
+        else:
+            depth2rgb = np.linalg.inv(rgb2cam) @ depth2cam
         return depth2rgb
 
     def _calculate_rgb2world(self, attrs: dict, which_cam: str):
@@ -185,6 +207,11 @@ class DatasetClipProcessor:
         )
 
         # Update camera matrices
+        if self.is_using_gpu:
+            rgb_K_new = torch.from_numpy(rgb_K_new.astype(np.float32)).to(self.device)
+            depth_K_new = torch.from_numpy(depth_K_new.astype(np.float32)).to(
+                self.device
+            )
         cam_info.rgb_k_new = rgb_K_new
         cam_info.depth_k_new = depth_K_new
 
@@ -229,14 +256,14 @@ class DatasetClipProcessor:
         """
         cam_info = self.camera_info[which_cam]
         rgb_image, depth_image = self._get_rgbd_pair(msgs, which_cam)
-
         self._save_rgbd_pair(rgb_image, depth_image, which_cam, frame_id)
 
-        # Rectify images
+        # 1. Rectify images
         rgb_rect, depth_rect = self.rectify_images(rgb_image, depth_image, cam_info)
 
         rgb_height, rgb_width = rgb_rect.shape[:2]
         depth_height, depth_width = depth_rect.shape[:2]
+        assert (rgb_height, rgb_width) == (depth_height, depth_width)
 
         # 2. Prepare depth data (convert to meters)
         depth_m = depth_rect.astype(np.float32) / self.depth_scale
@@ -310,14 +337,10 @@ class DatasetClipProcessor:
         valid_v_mask = (v_proj_idx >= 0) & (v_proj_idx < rgb_height)
         in_bounds_mask = valid_u_mask & valid_v_mask
 
-        # Apply this final mask to get the image indices
         u_img_idx = u_proj_idx[in_bounds_mask]
         v_img_idx = v_proj_idx[in_bounds_mask]
 
-        # Apply the same final mask to the 3D points (in RGB camera frame)
         pts_final = pts_rgb_front[:, in_bounds_mask]  # (3, N_final)
-
-        # Corresponding Z values (depths in RGB camera frame) for these points, used for registered depth image
         z_final = pts_final[2, :]  # Shape: (N_final,)
 
         # Check if any points remain after all filtering
@@ -334,9 +357,7 @@ class DatasetClipProcessor:
         colors_rgb = colors_bgr[:, ::-1]  # Convert BGR to RGB
 
         # 11. Transform points to world frame
-        # Convert points to homogeneous coordinates (4, N_final)
         pts_final_homogen = np.vstack((pts_final, np.ones((1, pts_final.shape[1]))))
-        # Apply transformation
         pts_world_homogen = cam_info.rgb2world @ pts_final_homogen
         pts_final = pts_world_homogen[:3, :]
 
@@ -344,6 +365,7 @@ class DatasetClipProcessor:
         reg_depth_m = np.zeros((rgb_height, rgb_width), dtype=np.float32)
         reg_depth_m[v_img_idx, u_img_idx] = z_final
         reg_depth = (reg_depth_m * self.depth_scale).astype(np.uint16)
+
         point_cloud = np.hstack((pts_final.T, colors_rgb))  # Shape: (N, 6)
         if point_cloud.shape[0] < rgb_height * rgb_width * 0.04:
             self.logger.warning(
@@ -358,6 +380,149 @@ class DatasetClipProcessor:
         cv2.imwrite(str(out_reg_depth_path), reg_depth)
         return str(out_pcd_path)
 
+    def process_image_pair_pytorch(
+        self, msgs: dict, which_cam: str, frame_id: str
+    ) -> str:
+        """
+        Process a single RGB-Depth image pair using PyTorch and generate point cloud.
+        Image rectification is done by OpenCV (CPU), rest is on self.device (GPU if available).
+        """
+        cam_info = self.camera_info[which_cam]
+        rgb_image_np, depth_image_np = self._get_rgbd_pair(msgs, which_cam)
+        self._save_rgbd_pair(rgb_image_np, depth_image_np, which_cam, frame_id)
+
+        # 1. Rectify images
+        rgb_rect_np, depth_rect_np = self.rectify_images(
+            rgb_image_np, depth_image_np, cam_info
+        )
+
+        rgb_height, rgb_width = rgb_rect_np.shape[:2]
+        depth_height, depth_width = depth_rect_np.shape[:2]
+        assert (rgb_height, rgb_width) == (depth_height, depth_width)
+
+        rgb_rect = torch.from_numpy(rgb_rect_np.astype(np.float32)).to(self.device)
+        depth_rect = torch.from_numpy(depth_rect_np.astype(np.float32)).to(self.device)
+
+        # 2. Prepare depth data (convert to meters)
+        depth_m = depth_rect / self.depth_scale
+
+        # 3. Create pixel coordinate grid for the depth image
+        u_coords = torch.arange(depth_width, device=self.device, dtype=torch.float32)
+        v_coords = torch.arange(depth_height, device=self.device, dtype=torch.float32)
+        u_grid, v_grid = torch.meshgrid(u_coords, v_coords, indexing="xy")
+
+        u_flat = u_grid.flatten()
+        v_flat = v_grid.flatten()
+        z_flat = depth_m.flatten()
+
+        # 4. Filter out invalid depth values
+        valid_depth_mask = (z_flat > 1e-6) & torch.isfinite(z_flat)
+
+        u_valid = u_flat[valid_depth_mask]
+        v_valid = v_flat[valid_depth_mask]
+        z_valid = z_flat[valid_depth_mask]
+
+        if z_valid.numel() == 0:
+            self.logger.warning(
+                f"[{frame_id}_{which_cam}] No valid depth points after initial filtering."
+            )
+            return None
+
+        # 5. Unproject valid depth pixels to 3D points in the depth camera's coordinate frame
+        depth_k = cam_info.depth_k_new
+        x_valid = (u_valid - depth_k[0, 2]) * z_valid / depth_k[0, 0]
+        y_valid = (v_valid - depth_k[1, 2]) * z_valid / depth_k[1, 1]
+
+        # pts_valid shape: (3, N_valid)
+        pts_valid = torch.stack((x_valid, y_valid, z_valid), dim=0)
+
+        # 6. Transform points from depth camera frame to RGB camera frame
+        # pts_rgb_tf shape: (3, N_valid)
+        d2r_t = cam_info.depth2rgb[:3, 3].reshape(3, 1)
+        d2r_r = cam_info.depth2rgb[:3, :3]
+        pts_rgb_tf = torch.matmul(d2r_r, pts_valid) + d2r_t
+
+        # 7. Filter points that are behind or too close to the RGB camera plane
+        z_rgb_tf = pts_rgb_tf[2, :]
+        front_cam_mask = z_rgb_tf > 1e-6
+
+        # pts_rgb_front shape: (3, N_front)
+        pts_rgb_front = pts_rgb_tf[:, front_cam_mask]
+
+        if pts_rgb_front.shape[1] == 0:
+            self.logger.warning(
+                f"[{frame_id}_{which_cam}] No points in front of RGB camera after transformation."
+            )
+            return None
+        self.logger.debug(
+            f"{pts_rgb_front.shape[1]} points remaining after filtering behind-camera points."
+        )
+
+        x_front = pts_rgb_front[0, :]
+        y_front = pts_rgb_front[1, :]
+        z_front = pts_rgb_front[2, :]  # Z-depths in RGB camera frame
+
+        # 8. Project 3D points (in RGB camera frame) onto the RGB image plane
+        rgb_k = cam_info.rgb_k_new
+        u_proj_f = (rgb_k[0, 0] * x_front / z_front) + rgb_k[0, 2]
+        v_proj_f = (rgb_k[1, 1] * y_front / z_front) + rgb_k[1, 2]
+
+        # 9. Round projected coordinates and filter out-of-bounds
+        u_proj_idx = torch.round(u_proj_f).long()
+        v_proj_idx = torch.round(v_proj_f).long()
+
+        valid_u_mask = (u_proj_idx >= 0) & (u_proj_idx < rgb_width)
+        valid_v_mask = (v_proj_idx >= 0) & (v_proj_idx < rgb_height)
+        in_bounds_mask = valid_u_mask & valid_v_mask
+
+        u_img_idx = u_proj_idx[in_bounds_mask]
+        v_img_idx = v_proj_idx[in_bounds_mask]
+
+        pts_final = pts_rgb_front[:, in_bounds_mask]  # shape: (3, N_final)
+        z_final = pts_final[2, :]  # shape: (N_final,)
+
+        if pts_final.shape[1] == 0:
+            self.logger.warning(
+                f"[{frame_id}_{which_cam}] (PyTorch) No points projected within RGB image bounds."
+            )
+            return None
+
+        # 10. Get colors for these final points from the RGB image
+        colors_bgr = rgb_rect[v_img_idx, u_img_idx]  # (N_final, 3)
+        colors_rgb = colors_bgr[:, ::-1]  # Convert BGR to RGB
+
+        # 11. Transform points to world frame
+        # pts_final_homogen shape: (4, N_final)
+        ones_tensor = torch.ones(
+            (1, pts_final.shape[1]), device=self.device, dtype=torch.float32
+        )
+        pts_final_homogen = torch.cat((pts_final, ones_tensor), dim=0)
+        pts_world_homogen = torch.matmul(cam_info.rgb2world, pts_final_homogen)
+        pts_final_world = pts_world_homogen[:3, :]  # shape: (3, N_final)
+
+        # 12. Create and save the registered depth image and point cloud
+        # Registered depth image
+        reg_depth_m = torch.zeros(
+            (rgb_height, rgb_width), dtype=torch.float32, device=self.device
+        )
+        reg_depth_m[v_img_idx, u_img_idx] = z_final
+
+        reg_depth_scaled = reg_depth_m * self.depth_scale
+        reg_depth = reg_depth_scaled.cpu().numpy().astype(np.uint16)
+
+        # Point cloud
+        point_cloud = torch.cat((pts_final_world.T, colors_rgb.float()), dim=1)
+        point_cloud_np: np.ndarray = point_cloud.cpu().numpy()
+
+        if (
+            point_cloud_np.shape[0] < rgb_height * rgb_width * 0.04
+        ):  # Adjusted threshold
+            self.logger.warning(
+                f"[{frame_id}_{which_cam}] Generated point cloud is small: {point_cloud_np.shape[0]} points."
+            )
+
+        return self._save_depthreg_pcd(point_cloud_np, reg_depth, which_cam, frame_id)
+
     def _save_rgbd_pair(self, rgb_image, depth_image, which_cam, frame_id):
         self.rgb_dir.mkdir(parents=True, exist_ok=True)
         rgb_path = self.rgb_dir / f"{frame_id}_{which_cam}.png"
@@ -366,6 +531,17 @@ class DatasetClipProcessor:
         self.depth_dir.mkdir(parents=True, exist_ok=True)
         depth_path = self.depth_dir / f"{frame_id}_{which_cam}.png"
         cv2.imwrite(str(depth_path), depth_image)
+
+    def _save_depthreg_pcd(
+        self, pcd: np.ndarray, reg_depth: np.ndarray, which_cam: str, frame_id: str
+    ):
+        self.pcd_dir.mkdir(parents=True, exist_ok=True)
+        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
+        out_reg_depth_path = self.depth_dir / f"{frame_id}_{which_cam}_registered.png"
+
+        np.save(out_pcd_path, pcd)
+        cv2.imwrite(str(out_reg_depth_path), reg_depth)
+        return str(out_pcd_path)
 
     def _get_rgbd_pair(
         self, msgs: dict, which_cam: str
