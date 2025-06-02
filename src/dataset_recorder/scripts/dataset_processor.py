@@ -372,13 +372,7 @@ class DatasetClipProcessor:
                 "Generated point cloud is too small with {point_cloud.shape[0]} points"
             )
 
-        self.pcd_dir.mkdir(parents=True, exist_ok=True)
-        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
-        out_reg_depth_path = self.depth_dir / f"{frame_id}_{which_cam}_registered.png"
-
-        np.save(out_pcd_path, point_cloud)
-        cv2.imwrite(str(out_reg_depth_path), reg_depth)
-        return str(out_pcd_path)
+        return self._save_depthreg_pcd(point_cloud, reg_depth, which_cam, frame_id)
 
     def process_image_pair_pytorch(
         self, msgs: dict, which_cam: str, frame_id: str
