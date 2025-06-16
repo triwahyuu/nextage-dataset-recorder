@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <launch>
 
-  <arg name="task_config_path" default="$(find dataset_recorder)/task_configs/set0_target0.json"/>
+  <arg name="task_config_path"/>
   <arg name="kinect_left_sn" default="000153513712"/>
   <arg name="kinect_right_sn" default="000231113712"/>
   <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
   <arg name="color_resolution" default="1080P"/>        <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
 
-  <!-- 
+  <!--
   <include file="$(find dataset_recorder)/launch/dual_kinect_camera.launch">
     <arg name="kinect_left_sn" value="$(arg kinect_left_sn)"/>
     <arg name="kinect_right_sn" value="$(arg kinect_right_sn)"/>

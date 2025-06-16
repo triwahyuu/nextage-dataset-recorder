@@ -1,0 +1,13 @@
+{
+    "target_object": "lemon",
+    "available_objects": [
+        "tomato",
+        "lemon",
+        "tennis ball",
+        "big clamp",
+        "glue bottle",
+        "spoon",
+        "fork",
+        "sponge"
+    ]
+}
