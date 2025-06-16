@@ -115,9 +115,7 @@ class DatasetRecorder:
         self.is_recording = False
 
         # --- Save the manifest file ---
-        attributes_path = self.clip_dir / "attributes.json"
-        frame_info_file = "frame_info.json"
-        frame_info_path = self.clip_dir / frame_info_file
+        attributes_path = self.clip_dir / "attributes.pkl"
 
         time_now = rospy.Time.now()
         start_time_str = datetime.fromtimestamp(
@@ -143,13 +141,12 @@ class DatasetRecorder:
                 "metadata": final_metadata,
                 "attributes": self.attribute_data,
                 "task_info": self.task_info,
-                "frame_info_path": frame_info_file,
+                "frame_info": self.frame_info,
             }
-            with open(attributes_path, "w") as f:
-                json.dump(attributes_data, f)
-            with open(frame_info_path, "w") as f:
-                json.dump(self.frame_info, f)
-            rospy.loginfo(f"Manifest saved to {attributes_path}")
+            with open(attributes_path, "wb") as f:
+                pickle.dump(attributes_data, f)
+
+            rospy.loginfo(f"Attributes data saved to {attributes_path}")
         except Exception as e:
             rospy.logerr(f"Failed to save manifest file: {e}")
         # ---
