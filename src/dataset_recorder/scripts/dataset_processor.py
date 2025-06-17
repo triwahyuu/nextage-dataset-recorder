@@ -14,6 +14,13 @@ from scipy.spatial.transform import Rotation
 from cv_bridge import CvBridge
 
 
+# Logger setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+
+
 @dataclass
 class CameraParameters:
     """Dataclass to hold camera intrinsic and distortion parameters."""
@@ -44,7 +51,7 @@ class DatasetClipProcessor:
     """
 
     def __init__(
-        self, clip_dir: Path, depth_scale: float = 1000.0, use_gpu: bool = True
+        self, clip_dir: Path, depth_scale: float = 1000.0, device=torch.device("cuda")
     ):
         """
         Initialize the pipeline.
@@ -56,23 +63,16 @@ class DatasetClipProcessor:
         """
         self.clip_dir = Path(clip_dir).resolve()
 
-        # Logger setup
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-        )
         self.logger = logging.getLogger(__name__)
 
-        # Initialize device
-        if use_gpu and torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        self.device = device
         self.is_using_gpu = self.device == torch.device("cuda")
-        self.logger.info(f"Using device: {self.device}")
 
         self.attributes = self._load_attributes(self.clip_dir)
-        self.frame_info = self._load_frame_info(self.clip_dir)
+        if "frame_info" in self.attributes:
+            self.frame_info = self.attributes["frame_info"]
+        else:
+            self.frame_info = self._load_frame_info(self.clip_dir)
         self.depth_scale = depth_scale
         self.msg_idx_map = self.attributes["attributes"]["message_idx_map"]
 
@@ -106,8 +106,15 @@ class DatasetClipProcessor:
 
     def _load_attributes(self, dir: Path):
         attr_fpath = dir / "attributes.json"
-        with open(attr_fpath, "r") as f:
-            attrs = json.load(f)
+        attr_pkl_fpath = dir / "attributes.pkl"
+        if attr_fpath.exists():
+            with open(attr_fpath, "r") as f:
+                attrs = json.load(f)
+        elif attr_pkl_fpath.exists():
+            with open(attr_pkl_fpath, "rb") as f:
+                attrs = pickle.load(f)
+        else:
+            raise RuntimeError("Invalid dataset format!")
         return attrs
 
     def _load_frame_info(self, dir: Path):
@@ -254,6 +261,10 @@ class DatasetClipProcessor:
         Returns:
             Path to saved point cloud file
         """
+        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
+        if out_pcd_path.exists():
+            return out_pcd_path
+
         cam_info = self.camera_info[which_cam]
         rgb_image, depth_image = self._get_rgbd_pair(msgs, which_cam)
         self._save_rgbd_pair(rgb_image, depth_image, which_cam, frame_id)
@@ -384,6 +395,10 @@ class DatasetClipProcessor:
         Process a single RGB-Depth image pair using PyTorch and generate point cloud.
         Image rectification is done by OpenCV (CPU), rest is on self.device (GPU if available).
         """
+        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
+        if out_pcd_path.exists():
+            return out_pcd_path
+
         cam_info = self.camera_info[which_cam]
         rgb_image_np, depth_image_np = self._get_rgbd_pair(msgs, which_cam)
         self._save_rgbd_pair(rgb_image_np, depth_image_np, which_cam, frame_id)
@@ -590,9 +605,18 @@ class DatasetClipProcessor:
 
 
 class DatasetProcessor:
-    def __init__(self, dataset_dir, depth_scale=1000.0):
+    def __init__(self, dataset_dir, depth_scale=1000.0, use_gpu=True):
         self.dataset_dir = Path(dataset_dir).resolve()
         self.depth_scale = float(depth_scale)
+
+        self.logger = logging.getLogger(__name__)
+
+        # Initialize device
+        if use_gpu and torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+        self.logger.info(f"Using device: {self.device}")
 
         self.clip_dirs = [d for d in self.dataset_dir.iterdir() if d.is_dir()]
 
@@ -601,7 +625,9 @@ class DatasetProcessor:
 
     def run(self):
         for clip_dir in self.clip_dirs:
-            processor = DatasetClipProcessor(clip_dir, self.depth_scale, use_gpu=True)
+            processor = DatasetClipProcessor(
+                clip_dir, self.depth_scale, device=self.device
+            )
             processor.run()
 
 
@@ -614,7 +640,7 @@ if __name__ == "__main__":
         nargs="?",
         type=str,
         help="Path to dataset directory",
-        default="/workspaces/dataset_recorder/playground/recordings",
+        default="/workspaces/dataset_recorder/recordings",
     )
     args = parser.parse_args()
 
