@@ -74,6 +74,7 @@ class DatasetRecorder:
         # ---
 
         rospy.loginfo("Dataset recorder initialized.")
+        rospy.loginfo(f"Target object: {self.task_info['target_object']}")
         rospy.loginfo("Waiting for trigger to start recording.")
 
     def handle_start_recording(self, req: TriggerRequest) -> TriggerResponse:
@@ -102,7 +103,9 @@ class DatasetRecorder:
         self.frame_count = 0
         self.last_sync_time = rospy.Time(0)  # Reset last sync time
 
-        rospy.loginfo(f"Started recording to {self.clip_dir}")
+        rospy.loginfo(
+            f"Started recording to {self.clip_dir}, target object: {self.task_info['target_object']}"
+        )
         return TriggerResponse(
             success=True, message=f"Started recording to {self.clip_dir}"
         )
