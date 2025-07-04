@@ -108,7 +108,7 @@ class RobotStateRecorder:
 
     def get_pose_tf_mat(self, tf_name: str, base_frame: str):
         tfstamped = self.get_pose_tf(tf_name, base_frame)
-        if tfs is None:
+        if tfstamped is None:
             return None
 
         translation = [
