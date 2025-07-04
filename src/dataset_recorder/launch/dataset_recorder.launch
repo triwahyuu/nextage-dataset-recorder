@@ -17,9 +17,6 @@
   </include>
   -->
 
-  <!-- camera pose tf -->
-  <include file="$(find dataset_recorder)/launch/camera_base_pose.launch"/>
-
   <!-- Dataset Recorder Node -->
   <node name="dataset_recorder" pkg="dataset_recorder" type="dataset_recorder_node.py" output="screen">
     <param name="save_dir" value="$(arg save_dir)" />

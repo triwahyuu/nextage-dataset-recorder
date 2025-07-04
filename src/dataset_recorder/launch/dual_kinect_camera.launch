@@ -6,6 +6,10 @@
   <arg name="fps" default="15"/>                        <!-- FPS to run both cameras at. Valid options are 5, 15, and 30 -->
   <arg name="color_resolution" default="1080P"/>        <!-- Resolution at which to run the color camera. Valid options: 720P, 1080P, 1440P, 1536P, 2160P, 3072P -->
 
+  <!-- camera pose tf -->
+  <include file="$(find dataset_recorder)/launch/camera_base_pose.launch"/>
+
+
   <group ns="kinect_left">
     <include file="$(find azure_kinect_ros_driver)/launch/kinect_rgbd.launch">
       <arg name="tf_prefix" value="kinect_left_"/>
