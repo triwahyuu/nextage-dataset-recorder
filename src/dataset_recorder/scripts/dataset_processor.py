@@ -87,8 +87,6 @@ class DatasetClipProcessor:
         self.depth_dir = self.clip_dir / "depth"
         self.pcd_dir = self.clip_dir / "point_cloud"
 
-        self.logger.info(f"Processing clip {self.clip_dir}")
-
     def _get_camera_info(self, attrs: dict, which_cam: str):
         rgb_cam = self._load_camera_info(attrs, which_cam, "rgb")
         depth_cam = self._load_camera_info(attrs, which_cam, "depth")
@@ -624,7 +622,9 @@ class DatasetProcessor:
             raise RuntimeError(f"Dataset in {self.dataset_dir} is empty.")
 
     def run(self):
-        for clip_dir in self.clip_dirs:
+        num_clips = len(self.clip_dirs)
+        for idx, clip_dir in enumerate(self.clip_dirs):
+            self.logger.info(f"[{idx}/{num_clips}] Processing clip {clip_dir}")
             processor = DatasetClipProcessor(
                 clip_dir, self.depth_scale, device=self.device
             )
