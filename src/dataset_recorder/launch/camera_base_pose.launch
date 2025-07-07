@@ -3,7 +3,7 @@
        http://wiki.ros.org/geometry2/RotationMethods and https://en.wikipedia.org/wiki/Euler_angles for more info. -->
   <!-- xyz="0.581063 -0.0190241 0.663927" rpy="2.65036 -1.65389 -0.479746" -->
   <node pkg="tf2_ros" type="static_transform_publisher" name="kinect_left_link_broadcaster"
-      args="0.848837 0.16649 0.855082   -0.515148 -0.0904808 0.837529 -0.158054 WAIST kinect_left_camera_base" />
+      args="0.669282 0.182031 0.69212   -0.588662 0.0251643 0.797888 -0.127353 WAIST kinect_left_camera_base" />
   <node pkg="tf2_ros" type="static_transform_publisher" name="kinect_right_link_broadcaster"
-      args="0.774873 -0.202124 0.698318   -0.546951 0.00892943 0.837117 -0.000711777 WAIST kinect_right_camera_base" />
+      args="0.660137 -0.210977 0.664612   -0.602237 0.0437969 0.796082 0.0405703 WAIST kinect_right_camera_base" />
 </launch>
