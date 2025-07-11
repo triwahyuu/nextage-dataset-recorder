@@ -9,7 +9,7 @@
 
   <!-- center cam -->
   <node pkg="tf2_ros" type="static_transform_publisher" name="left_camera_link_broadcaster"
-      args="0.669282 0.182031 0.69212   -0.588662 0.0251643 0.797888 -0.127353 WAIST kinect_left_camera_base" />
+      args="0.895473 -0.0406736 0.300877   -0.250663 -0.0222216 0.967568 0.0220603 WAIST kinect_left_camera_base" />
 
   <!-- right cam -->
   <node pkg="tf2_ros" type="static_transform_publisher" name="right_camera_link_broadcaster"
