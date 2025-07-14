@@ -51,7 +51,11 @@ class DatasetClipProcessor:
     """
 
     def __init__(
-        self, clip_dir: Path, depth_scale: float = 1000.0, device=torch.device("cuda")
+        self,
+        clip_dir: Path,
+        no_pointcloud: bool = False,
+        depth_scale: float = 1000.0,
+        device=torch.device("cuda"),
     ):
         """
         Initialize the pipeline.
@@ -62,6 +66,7 @@ class DatasetClipProcessor:
             use_gpu (bool): Whether to use GPU if available.
         """
         self.clip_dir = Path(clip_dir).resolve()
+        self.no_pointcloud = no_pointcloud
 
         self.logger = logging.getLogger(__name__)
 
@@ -267,6 +272,9 @@ class DatasetClipProcessor:
         rgb_image, depth_image = self._get_rgbd_pair(msgs, which_cam)
         self._save_rgbd_pair(rgb_image, depth_image, which_cam, frame_id)
 
+        if self.no_pointcloud:
+            return
+
         # 1. Rectify images
         rgb_rect, depth_rect = self.rectify_images(rgb_image, depth_image, cam_info)
 
@@ -400,6 +408,9 @@ class DatasetClipProcessor:
         cam_info = self.camera_info[which_cam]
         rgb_image_np, depth_image_np = self._get_rgbd_pair(msgs, which_cam)
         self._save_rgbd_pair(rgb_image_np, depth_image_np, which_cam, frame_id)
+
+        if self.no_pointcloud:
+            return
 
         # 1. Rectify images
         rgb_rect_np, depth_rect_np = self.rectify_images(
@@ -612,9 +623,13 @@ class DatasetClipProcessor:
 
 
 class DatasetProcessor:
-    def __init__(self, dataset_dir, depth_scale=1000.0, use_gpu=True):
+    def __init__(
+        self, dataset_dir, no_pointcloud=False, depth_scale=1000.0, use_gpu=True
+    ):
         self.dataset_dir = Path(dataset_dir).resolve()
         self.depth_scale = float(depth_scale)
+
+        self.no_pointcloud = no_pointcloud
 
         self.logger = logging.getLogger(__name__)
 
@@ -635,7 +650,7 @@ class DatasetProcessor:
         for idx, clip_dir in enumerate(self.clip_dirs):
             self.logger.info(f"[{idx}/{num_clips}] Processing clip {clip_dir}")
             processor = DatasetClipProcessor(
-                clip_dir, self.depth_scale, device=self.device
+                clip_dir, self.no_pointcloud, self.depth_scale, device=self.device
             )
             processor.run()
 
@@ -651,7 +666,11 @@ if __name__ == "__main__":
         help="Path to dataset directory",
         default="/workspaces/dataset_recorder/recordings",
     )
+    parser.add_argument(
+        "--no-pointcloud", action="store_true", help="Do not generate pointcloud."
+    )
+
     args = parser.parse_args()
 
-    processor = DatasetProcessor(args.dataset_dir)
+    processor = DatasetProcessor(args.dataset_dir, args.no_pointcloud)
     processor.run()
