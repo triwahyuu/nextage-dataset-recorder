@@ -584,11 +584,20 @@ class DatasetClipProcessor:
         total_start_time = time.time()
 
         for info in tqdm(self.frame_info):
+            frame_id = info["frame_id"]
+
+            left_pcd_path = self.pcd_dir / f"{frame_id}_left_processed.npy"
+            right_pcd_path = self.pcd_dir / f"{frame_id}_right_processed.npy"
+            if left_pcd_path.exists() and right_pcd_path.exists():
+                outpath = {"left": left_pcd_path, "right": right_pcd_path}
+                output_files.append(outpath)
+                continue
+
             msg_path = self.clip_dir / f"{info['messages_path']}"
             with open(msg_path, "rb") as f:
                 msgs = pickle.load(f)
 
-            outpath = self.process_frame(msgs, info["frame_id"])
+            outpath = self.process_frame(msgs, frame_id)
             output_files.append(outpath)
 
         total_time = (time.time() - total_start_time) * 1000
