@@ -555,11 +555,13 @@ class DatasetClipProcessor:
         self, pcd: np.ndarray, reg_depth: np.ndarray, which_cam: str, frame_id: str
     ):
         self.pcd_dir.mkdir(parents=True, exist_ok=True)
-        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
         out_reg_depth_path = self.depth_dir / f"{frame_id}_{which_cam}_registered.png"
-
-        np.save(out_pcd_path, pcd)
         cv2.imwrite(str(out_reg_depth_path), reg_depth)
+
+        # out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
+        # np.save(out_pcd_path, pcd)
+        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npz"
+        np.savez_compressed(out_pcd_path, pcd=pcd)
         return str(out_pcd_path)
 
     def _get_rgbd_pair(
@@ -599,6 +601,13 @@ class DatasetClipProcessor:
 
             left_pcd_path = self.pcd_dir / f"{frame_id}_left_processed.npy"
             right_pcd_path = self.pcd_dir / f"{frame_id}_right_processed.npy"
+            if left_pcd_path.exists() and right_pcd_path.exists():
+                outpath = {"left": left_pcd_path, "right": right_pcd_path}
+                output_files.append(outpath)
+                continue
+
+            left_pcd_path = self.pcd_dir / f"{frame_id}_left_processed.npz"
+            right_pcd_path = self.pcd_dir / f"{frame_id}_right_processed.npz"
             if left_pcd_path.exists() and right_pcd_path.exists():
                 outpath = {"left": left_pcd_path, "right": right_pcd_path}
                 output_files.append(outpath)
