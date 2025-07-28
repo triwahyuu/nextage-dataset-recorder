@@ -56,6 +56,7 @@ class DatasetClipProcessor:
         no_pointcloud: bool = False,
         depth_scale: float = 1000.0,
         device=torch.device("cuda"),
+        compressed_pcd: bool = False,
     ):
         """
         Initialize the pipeline.
@@ -72,6 +73,7 @@ class DatasetClipProcessor:
 
         self.device = device
         self.is_using_gpu = self.device == torch.device("cuda")
+        self.compressed_pcd = compressed_pcd
 
         self.attributes = self._load_attributes(self.clip_dir)
         if "frame_info" in self.attributes:
@@ -558,10 +560,12 @@ class DatasetClipProcessor:
         out_reg_depth_path = self.depth_dir / f"{frame_id}_{which_cam}_registered.png"
         cv2.imwrite(str(out_reg_depth_path), reg_depth)
 
-        # out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
-        # np.save(out_pcd_path, pcd)
-        out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npz"
-        np.savez_compressed(out_pcd_path, pcd=pcd)
+        if not self.compressed_pcd:
+            out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npy"
+            np.save(out_pcd_path, pcd)
+        else:
+            out_pcd_path = self.pcd_dir / f"{frame_id}_{which_cam}_processed.npz"
+            np.savez_compressed(out_pcd_path, pcd=pcd)
         return str(out_pcd_path)
 
     def _get_rgbd_pair(
@@ -680,8 +684,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-pointcloud", action="store_true", help="Do not generate pointcloud."
     )
+    parser.add_argument(
+        "--compressed-pointcloud",
+        action="store_true",
+        help="store pointcloud as compressed numpy.",
+    )
 
     args = parser.parse_args()
 
-    processor = DatasetProcessor(args.dataset_dir, args.no_pointcloud)
+    processor = DatasetProcessor(
+        args.dataset_dir,
+        no_pointcloud=args.no_pointcloud,
+        compressed_pcd=args.compressed_pointcloud,
+    )
     processor.run()
