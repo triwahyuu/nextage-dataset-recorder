@@ -115,8 +115,6 @@ class DatasetRecorder:
         if not self.is_recording:
             return TriggerResponse(success=False, message="Not currently recording")
 
-        self.is_recording = False
-
         # --- Save the manifest file ---
         attributes_path = self.clip_dir / "attributes.pkl"
 
@@ -161,6 +159,7 @@ class DatasetRecorder:
         self.clip_dir = None
         self.recording_start_time = None
         self.frame_info = []
+        self.is_recording = False
 
         return TriggerResponse(
             success=True,
@@ -192,6 +191,9 @@ class DatasetRecorder:
             msgs_path = self.msgs_dir / f"{frame_id_str}.pkl"
             with open(msgs_path, "wb") as f:
                 pickle.dump(msgs, f)
+
+            if self.clip_dir is None:
+                return
 
             frame_info["messages_path"] = str(msgs_path.relative_to(self.clip_dir))
             self.frame_info.append(frame_info)
