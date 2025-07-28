@@ -639,6 +639,8 @@ class DatasetProcessor:
         else:
             self.device = torch.device("cpu")
         self.logger.info(f"Using device: {self.device}")
+        if self.no_pointcloud:
+            self.logger.info(f"Not generating point cloud")
 
         self.clip_dirs = [d for d in self.dataset_dir.iterdir() if d.is_dir()]
 
