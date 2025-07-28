@@ -637,12 +637,18 @@ class DatasetClipProcessor:
 
 class DatasetProcessor:
     def __init__(
-        self, dataset_dir, no_pointcloud=False, depth_scale=1000.0, use_gpu=True
+        self,
+        dataset_dir,
+        no_pointcloud=False,
+        depth_scale=1000.0,
+        use_gpu=True,
+        compressed_pcd=False,
     ):
         self.dataset_dir = Path(dataset_dir).resolve()
         self.depth_scale = float(depth_scale)
 
         self.no_pointcloud = no_pointcloud
+        self.compressed_pcd = compressed_pcd
 
         self.logger = logging.getLogger(__name__)
 
@@ -665,7 +671,11 @@ class DatasetProcessor:
         for idx, clip_dir in enumerate(self.clip_dirs):
             self.logger.info(f"[{idx}/{num_clips}] Processing clip {clip_dir}")
             processor = DatasetClipProcessor(
-                clip_dir, self.no_pointcloud, self.depth_scale, device=self.device
+                clip_dir,
+                self.no_pointcloud,
+                self.depth_scale,
+                device=self.device,
+                compressed_pcd=self.compressed_pcd,
             )
             processor.run()
 
