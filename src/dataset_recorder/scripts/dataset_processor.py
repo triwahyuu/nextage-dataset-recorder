@@ -639,6 +639,7 @@ class DatasetProcessor:
     def __init__(
         self,
         dataset_dir,
+        num_demo=None,
         no_pointcloud=False,
         depth_scale=1000.0,
         use_gpu=True,
@@ -661,10 +662,14 @@ class DatasetProcessor:
         if self.no_pointcloud:
             self.logger.info(f"Not generating point cloud")
 
+        self.num_demo = num_demo
         self.clip_dirs = [d for d in self.dataset_dir.iterdir() if d.is_dir()]
-
+        if self.num_demo is not None:
+            self.clip_dirs.sort()
+            self.clip_dirs = self.clip_dirs[: self.num_demo]
         if len(self.clip_dirs) == 0:
             raise RuntimeError(f"Dataset in {self.dataset_dir} is empty.")
+        self.logger.info(f"Processing {len(self.clip_dirs)} episodes.")
 
     def run(self):
         num_clips = len(self.clip_dirs)
@@ -690,6 +695,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to dataset directory",
         default="/workspaces/dataset_recorder/recordings",
+    )
+    parser.add_argument(
+        "--num-demo",
+        "-n",
+        type=int,
+        help="Set the number of episodes to include in dataset",
     )
     parser.add_argument(
         "--no-pointcloud", action="store_true", help="Do not generate pointcloud."
