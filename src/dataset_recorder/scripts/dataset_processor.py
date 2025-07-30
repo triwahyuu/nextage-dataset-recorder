@@ -665,6 +665,7 @@ class DatasetProcessor:
         self.num_demo = num_demo
         self.clip_dirs = [d for d in self.dataset_dir.iterdir() if d.is_dir()]
         if self.num_demo is not None:
+            self.num_demo = min(self.num_demo, len(self.clip_dirs))
             self.clip_dirs.sort()
             self.clip_dirs = self.clip_dirs[: self.num_demo]
         if len(self.clip_dirs) == 0:
@@ -715,6 +716,7 @@ if __name__ == "__main__":
 
     processor = DatasetProcessor(
         args.dataset_dir,
+        num_demo=args.num_demo,
         no_pointcloud=args.no_pointcloud,
         compressed_pcd=args.compressed_pointcloud,
     )
