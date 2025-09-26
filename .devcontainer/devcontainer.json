@@ -1,9 +1,10 @@
 {
 	"name": "dev",
-	"build": {
-		"dockerfile": "Dockerfile",
-		"context": ".."
-	},
+	// "build": {
+	// 	"dockerfile": "Dockerfile",
+	// 	"context": ".."
+	// },
+	"image": "triwahyuu/nextagea-dataset-recorder:fix-ros",
 	"runArgs": [
 		"--cap-add=SYS_PTRACE",
 		"--gpus=all",
@@ -26,7 +27,9 @@
 	"initializeCommand": "xhost +",
 	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
 	"mounts": [
-		"source=dataset_recorder-bashhistory,target=/commandhistory,type=volume"
+		"source=dataset_recorder-bashhistory,target=/commandhistory,type=volume",
+		// "type=bind,source=/media/aisl/HD-LE-B/tri/,target=/workspaces/disk",
+		"type=bind,source=/media/aisl/TRIW-4TB/Reasearch,target=/workspaces/ssd"
 	],
 	"customizations": {
 		"vscode": {
