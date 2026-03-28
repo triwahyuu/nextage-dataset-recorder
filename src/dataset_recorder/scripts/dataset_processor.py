@@ -8,7 +8,7 @@ import torch
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation
 from cv_bridge import CvBridge
@@ -57,6 +57,7 @@ class DatasetClipProcessor:
         depth_scale: float = 1000.0,
         device=torch.device("cuda"),
         compressed_pcd: bool = False,
+        output_dir: Optional[Path] = None
     ):
         """
         Initialize the pipeline.
@@ -90,9 +91,10 @@ class DatasetClipProcessor:
             "right": self._get_camera_info(self.attributes, "right"),
         }
 
-        self.rgb_dir = self.clip_dir / "rgb"
-        self.depth_dir = self.clip_dir / "depth"
-        self.pcd_dir = self.clip_dir / "point_cloud"
+        self.output_dir = output_dir or self.clip_dir
+        self.rgb_dir = self.output_dir / "rgb"
+        self.depth_dir = self.output_dir / "depth"
+        self.pcd_dir = self.output_dir / "point_cloud"
 
     def _get_camera_info(self, attrs: dict, which_cam: str):
         rgb_cam = self._load_camera_info(attrs, which_cam, "rgb")
@@ -644,8 +646,11 @@ class DatasetProcessor:
         depth_scale=1000.0,
         use_gpu=True,
         compressed_pcd=False,
+        output_dir=None
     ):
         self.dataset_dir = Path(dataset_dir).resolve()
+        output_dir = output_dir or self.dataset_dir
+        self.output_dir = Path(output_dir).resolve()
         self.depth_scale = float(depth_scale)
 
         self.no_pointcloud = no_pointcloud
@@ -676,12 +681,14 @@ class DatasetProcessor:
         num_clips = len(self.clip_dirs)
         for idx, clip_dir in enumerate(self.clip_dirs):
             self.logger.info(f"[{idx}/{num_clips}] Processing clip {clip_dir}")
+            clip_outdir = self.output_dir / clip_dir.name
             processor = DatasetClipProcessor(
                 clip_dir,
                 self.no_pointcloud,
                 self.depth_scale,
                 device=self.device,
                 compressed_pcd=self.compressed_pcd,
+                output_dir=clip_outdir
             )
             processor.run()
 
@@ -696,6 +703,12 @@ if __name__ == "__main__":
         type=str,
         help="Path to dataset directory",
         default="/workspaces/dataset_recorder/recordings",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=str,
+        help="Output directory to the generated dataset.",
     )
     parser.add_argument(
         "--num-demo",
