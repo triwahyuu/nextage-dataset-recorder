@@ -68,7 +68,11 @@ RUN python3 -m pip install pip --upgrade && \
     pip3 install torch==2.1.2 torchvision==0.16.2 -f https://download.pytorch.org/whl/cu118/torch_stable.html && \
     pip3 install git+https://github.com/facebookresearch/detectron2.git && \
     pip3 install --upgrade opencv-python transformers einops scikit-video timm scipy && \
-    pip3 install gradio==4.11.0
+    pip3 install gradio==4.11.0 zarr==2.12.0
+
+COPY third_party/pytorch3d_simplified pytorch3d_simplified
+RUN cd pytorch3d_simplified && \
+    pip3 install .
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

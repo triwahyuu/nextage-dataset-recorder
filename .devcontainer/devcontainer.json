@@ -1,9 +1,10 @@
 {
 	"name": "dev",
-	"build": {
-		"dockerfile": "Dockerfile",
-		"context": ".."
-	},
+	// "build": {
+	// 	"dockerfile": "Dockerfile",
+	// 	"context": ".."
+	// },
+	"image": "triwahyuu/nextagea-dataset-recorder:dev",
 	"runArgs": [
 		"--cap-add=SYS_PTRACE",
 		"--gpus=all",
@@ -26,6 +27,7 @@
 	"initializeCommand": "xhost +",
 	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
 	"mounts": [
+		"type=bind,source=/home/tri/tut/research/recordings,target=/workspaces/dataset",
 		"source=dataset_recorder-bashhistory,target=/commandhistory,type=volume"
 	],
 	"customizations": {
@@ -37,8 +39,7 @@
 				"ms-python.python",
 				"ms-python.black-formatter",
 				"ms-toolsai.jupyter",
-				"ms-python.vscode-pylance",
-				"ms-iot.vscode-ros"
+				"ms-python.vscode-pylance"
 			],
 			"settings": {
 				"remote.autoForwardPorts": false,
