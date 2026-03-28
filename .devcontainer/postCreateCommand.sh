@@ -16,6 +16,14 @@ echo "export ROS_HOSTNAME=127.0.0.1" >> ~/.zshrc
 echo "export ROS_MASTER_URI=http://127.0.0.1:11311" >> ~/.bashrc
 echo "export ROS_MASTER_URI=http://127.0.0.1:11311" >> ~/.zshrc
 
+# for multi pc setup
+echo "export ROS_IP=133.15.23.192" >> ~/.bashrc
+echo "export ROS_IP=133.15.23.192" >> ~/.zshrc
+echo "export ROS_HOSTNAME=133.15.23.192" >> ~/.bashrc
+echo "export ROS_HOSTNAME=133.15.23.192" >> ~/.zshrc
+echo "export ROS_MASTER_URI=http://133.15.23.21:11311" >> ~/.bashrc
+echo "export ROS_MASTER_URI=http://133.15.23.21:11311" >> ~/.zshrc
+
 echo "export ROS_PYTHON_VERSION=3" >> ~/.bashrc
 echo "export ROS_PYTHON_VERSION=3" >> ~/.zshrc
 

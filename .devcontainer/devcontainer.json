@@ -27,7 +27,6 @@
 	"initializeCommand": "xhost +",
 	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
 	"mounts": [
-		"type=bind,source=/home/tri/tut/research/recordings,target=/workspaces/dataset",
 		"source=dataset_recorder-bashhistory,target=/commandhistory,type=volume"
 	],
 	"customizations": {

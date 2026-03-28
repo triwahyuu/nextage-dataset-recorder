@@ -15,8 +15,8 @@
       <arg name="tf_prefix" value="kinect_left_"/>
       <arg name="sensor_sn" value="$(arg kinect_left_sn)"/>
       <arg name="overwrite_robot_description" value="false"/>
-      <arg name="point_cloud" value="true"/>
-      <arg name="rgb_point_cloud" value="true"/>
+      <arg name="point_cloud" value="false"/>
+      <arg name="rgb_point_cloud" value="false"/>
       <arg name="fps" value="$(arg fps)"/>
       <arg name="color_resolution" value="$(arg color_resolution)"/>
       <arg name="num_worker_threads" value="8"/>
@@ -28,8 +28,8 @@
       <arg name="tf_prefix" value="kinect_right_"/>
       <arg name="sensor_sn" value="$(arg kinect_right_sn)"/>
       <arg name="overwrite_robot_description" value="false"/>
-      <arg name="point_cloud" value="true"/>
-      <arg name="rgb_point_cloud" value="true"/>
+      <arg name="point_cloud" value="false"/>
+      <arg name="rgb_point_cloud" value="false"/>
       <arg name="fps" value="$(arg fps)"/>
       <arg name="color_resolution" value="$(arg color_resolution)"/>
       <arg name="num_worker_threads" value="8"/>
