@@ -40,7 +40,7 @@ The container will be pulled and configured automatically.
 
 ### Option 2: Docker (manual)
 
-Use the pre-built Docker image directly:
+Use the pre-built Docker image directly with `triwahyuu/nextagea-dataset-recorder:dev` image:
 
 ```bash
 docker run -it --gpus=all --privileged --net=host --ipc=host --pid=host \
