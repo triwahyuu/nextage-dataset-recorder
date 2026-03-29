@@ -9,6 +9,13 @@ A ROS Noetic workspace for recording synchronized demonstration datasets from du
 - **[Data Format Reference](src/dataset_recorder/DATA_FORMAT.md)** — Detailed specification of data formats at each pipeline stage: raw recorded format, processed dataset format, and training-ready Zarr format.
 
 
+## DATASET RELEASE
+
+**The training-ready dataset collected using this system WILL BE RELEASED SOON.**
+
+<!-- TODO: Add dataset download link here -->
+
+
 ## Pipeline Overview
 
 The system operates in three stages:
