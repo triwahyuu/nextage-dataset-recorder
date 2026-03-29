@@ -22,9 +22,7 @@ The system operates in three stages:
 
 ## Hardware
 
-- **Cameras:** 2x Azure Kinect DK
-  - Left (from the robot's perspective): serial `000153513712`
-  - Right: serial `000231113712`
+- **Cameras:** 2x Azure Kinect DK RGBD Cameras
 - **Robot:** Nextage (bimanual humanoid, base frame: `WAIST`)
 - **GPU:** NVIDIA GPU with CUDA 11.8 (for post-processing)
 
